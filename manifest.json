@@ -3,7 +3,7 @@
   "short_name": "Scadenze",
   "description": "Mirisa Ceramiche: cartelle AdER, tasse, auto e spese con scadenze, pagamenti e promemoria",
   "lang": "it",
-  "id": "scadenze-mirisa",
+  "id": "/scadenze-mirisa/?app=mirisa-scadenze-v3",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1544,7 +1544,7 @@ async function elaboraDocumentoAI(base64data, mimeType, promptText) {
     generationConfig: { temperature: 0.1 }
   };
 
-  const modelli = ['gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+  const modelli = ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite'];
   let ultimoErrore = '';
 
   for (let i = 0; i < modelli.length; i++) {

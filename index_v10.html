@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#0f766e">
-  <title>Scadenzario Personale v13 - Smart Match & Targa Pro</title>
+  <title>Scadenzario Personale v14 - Smart Match & RCA Pro</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -256,7 +256,7 @@
 <div id="loginScreen" class="login">
   <form id="loginForm" class="login-box" autocomplete="on">
     <div class="logo">€</div>
-    <h2>Scadenzario Personale v13</h2>
+    <h2>Scadenzario Personale v14</h2>
     <p class="sub">Accesso riservato</p>
     <label>Email
       <input type="email" id="loginEmail" autocomplete="username" required>
@@ -277,7 +277,7 @@
     <div class="top-in">
       <div class="brand">
         <div class="logo">€</div>
-        <div><b>Scadenzario Personale v13</b><small>Smart Match & Targa Pro</small></div>
+        <div><b>Scadenzario Personale v14</b><small>Smart Match & RCA Pro</small></div>
       </div>
       <nav class="nav" id="nav">
         <button data-view="scadenze" class="active" aria-label="Vista Scadenze"><span>📅</span>Scadenze</button>
@@ -449,14 +449,14 @@
               <input type="text" id="nuovaCat" maxlength="60" placeholder="Es. Condominio, Palestra, Canone RAI">
             </div>
 
-            <!-- Box di Verifica Rapida Targa (per Bollo e Assicurazione) -->
+            <!-- Box di Verifica RCA Ufficiale (Portali Pubblici) -->
             <div id="boxTargaQuery" class="card" style="margin-top:14px; background:var(--surface-2); border-color:var(--primary);" hidden>
-              <label class="f" for="targaRapida">🚗 Verifica rapida targa (Bollo / RCA)</label>
+              <label class="f" for="targaRapida">🛡️ Verifica copertura RCA online (Portale dell'Automobilista)</label>
               <div class="row" style="margin-top:6px;">
                 <input type="text" id="targaRapida" placeholder="Es. AB123CD" style="max-width:180px; text-transform:uppercase;" maxlength="10">
-                <button type="button" class="btn btn-primary btn-sm" id="btnCercaTarga">🔍 Cerca targa online</button>
+                <a href="https://www.ilportaledellautomobilista.it/web/portale-automobilista/ext/verifica-copertura-rc" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" id="btnCercaTarga">🌐 Apri Verifica RCA Ufficiale</a>
               </div>
-              <div id="targaRisultato" class="hint" style="margin-top:6px; font-weight:600; color:var(--primary);"></div>
+              <div class="hint" style="margin-top:6px;">Inserisci la targa e clicca per aprire direttamente il controllo ufficiale ministeriale della polizza.</div>
             </div>
 
             <div class="grid-form" style="margin-top:14px;">
@@ -464,8 +464,8 @@
                 <input type="text" id="titolo" maxlength="200" required></div>
               <div><label class="f" for="riferimento" id="lblRif">Riferimento</label>
                 <input type="text" id="riferimento" maxlength="80"></div>
-              <div><label class="f" for="ente">Ente / Fornitore</label>
-                <input type="text" id="ente" maxlength="80" placeholder="Es. Regione Puglia, Unipol"></div>
+              <div><label class="f" for="ente">Ente / Compagnia</label>
+                <input type="text" id="ente" maxlength="80" placeholder="Es. UnipolSai, Allianz"></div>
             </div>
 
             <div id="boxVerbale" class="verbale-box" hidden>
@@ -504,7 +504,7 @@
           <div class="drop" id="dropAi">
             <div style="font-size:2rem;">📸</div>
             <b>Scatta una foto o carica un documento</b>
-            <small>L'Intelligenza Artificiale (gemini-3.5-flash-lite) leggerà fatture, bollette, bollo e polizze compilando automaticamente targa, regione e compagnia.</small>
+            <small>L'Intelligenza Artificiale (gemini-3.5-flash-lite) leggerà polizze, bollette e documenti compilando automaticamente targa e scadenza reale.</small>
             <input type="file" id="fileAi" accept="image/*,application/pdf" capture="environment" hidden aria-label="Scansiona documento con AI">
           </div>
           <div id="statusAi" class="hint" style="font-weight:600; text-align:center; margin-top:10px;"></div>
@@ -1502,7 +1502,7 @@ function esportaIcs(arr, nome) {
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(t.titolo)}`, 'TRIGGER:PT9H', 'END:VALARM',
       'END:VEVENT'].join('\r\n');
   });
-  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scadenzario Personale v13//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...ev, 'END:VCALENDAR'].join('\r\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scadenzario Personale v14//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...ev, 'END:VCALENDAR'].join('\r\n');
   scarica(new Blob([ics], { type: 'text/calendar;charset=utf-8' }), nome);
   mostraToast(`📅 File calendario scaricato`);
 }
@@ -1530,7 +1530,7 @@ $('btnIcsPiano').addEventListener('click', () => {
 });
 
 // ==============================================================
-// MOTORE INTELLIGENZA ARTIFICIALE E VERIFICA TARGA RAPIDA
+// MOTORE INTELLIGENZA ARTIFICIALE (gemini-3.5-flash-lite)
 // ==============================================================
 $('geminiKey').value = localStorage.getItem('scad_gemini_key') || '';
 $('geminiKey').addEventListener('input', e => localStorage.setItem('scad_gemini_key', e.target.value.trim()));
@@ -1588,48 +1588,6 @@ async function elaboraDocumentoAI(base64data, mimeType, promptText) {
   return JSON.parse(text);
 }
 
-// Funzione di verifica rapida targa assistita da IA (per Bollo e Assicurazione)
-$('btnCercaTarga').addEventListener('click', async () => {
-  const targa = $('targaRapida').value.trim().toUpperCase();
-  const apiKey = localStorage.getItem('scad_gemini_key');
-  const ris = $('targaRisultato');
-  
-  if (!targa) { alert('Inserisci prima una targa valida.'); return; }
-  if (!apiKey) { alert('Inserisci prima la Chiave API Gemini in "Gestione".'); return; }
-
-  ris.textContent = `⏳ Interrogazione dati per la targa ${targa} in corso...`;
-
-  try {
-    const prompt = `Analizza la targa automobilistica italiana "${targa}". Sulla base dei registri pubblici e delle banche dati ministeriali, stima o restituisci i dati probabili per questa targa in formato JSON stretto: {"ente": "Regione di competenza per il bollo o compagnia RCA stimata", "titolo": "Descrizione esatta es. Bollo auto targa ${targa}", "scadenza": "YYYY-MM-DD scadenza stimata o futura plausibile"}. Restituisci SOLO il JSON nudo.`;
-    
-    // Usiamo una chiamata rapida di stima testuale con Gemini
-    const payload = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1 }
-    };
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
-
-    let text = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const info = JSON.parse(text);
-
-    if (info.ente) $('ente').value = info.ente;
-    if (info.titolo && !$('titolo').value) $('titolo').value = info.titolo;
-    $('riferimento').value = targa;
-    if (info.scadenza) $('scadenza').value = info.scadenza;
-
-    ris.textContent = `✅ Dati recuperati per la targa ${targa}! Controlla i campi compilati.`;
-  } catch (err) {
-    ris.textContent = `⚠️ Impossibile completare la verifica automatica della targa. Inserisci i dati manualmente o usa la Scansione AI.`;
-  }
-});
-
 $('dropAi').addEventListener('click', () => $('fileAi').click());
 $('fileAi').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -1647,7 +1605,7 @@ $('fileAi').addEventListener('change', async e => {
   
   try {
     const imgData = await elaboraBase64(file);
-    const prompt = 'Analizza questo documento (bollo auto, polizza assicurativa, bolletta, multa). Estrai: 1) "categoria": scegli tra "Cartella Agenzia Riscossioni", "Bollo Auto", "Assicurazione", "Revisione / Tagliando", "AQP - Acquedotto Pugliese", "Verbali / Multe", "F24 / Tributi", "IMU / TARI / Tasse locali", "Utenze", "Affitto / Mutuo", "Finanziamento / Prestito", "Abbonamenti", "Rateizzazione Equitalia", "Altro". 2) "titolo": descrizione. 3) "ente": Regione emittente o Compagnia assicurativa. 4) "riferimento": targa o numero polizza. 5) "importo": valore numerico. 6) "scadenza": YYYY-MM-DD. Restituisci SOLO un JSON valido così: {"categoria": "...", "titolo": "...", "ente": "...", "riferimento": "...", "importo": 123.45, "scadenza": "YYYY-MM-DD"}. Usa null se manca un dato. Nessun testo extra.';
+    const prompt = 'Analizza questo documento (polizza assicurativa, bollo, bolletta). Estrai: 1) "categoria": scegli tra "Cartella Agenzia Riscossioni", "Bollo Auto", "Assicurazione", "Revisione / Tagliando", "AQP - Acquedotto Pugliese", "Verbali / Multe", "F24 / Tributi", "IMU / TARI / Tasse locali", "Utenze", "Affitto / Mutuo", "Finanziamento / Prestito", "Abbonamenti", "Rateizzazione Equitalia", "Altro". 2) "titolo": descrizione. 3) "ente": Compagnia assicurativa o Ente. 4) "riferimento": targa o numero polizza. 5) "importo": valore numerico. 6) "scadenza": YYYY-MM-DD. Restituisci SOLO un JSON valido così: {"categoria": "...", "titolo": "...", "ente": "...", "riferimento": "...", "importo": 123.45, "scadenza": "YYYY-MM-DD"}. Usa null se manca un dato. Nessun testo extra.';
     
     const info = await elaboraDocumentoAI(imgData.data, imgData.mime, prompt);
 
@@ -1664,7 +1622,7 @@ $('fileAi').addEventListener('change', async e => {
     $('quante').value = '1';
     aggiornaRicorrenza();
     
-    st.textContent = '✅ Dati estratti con successo (impostata 1 singola scadenza)! Controlla il form.';
+    st.textContent = '✅ Dati estratti con successo! Controlla il form.';
     document.querySelector('[data-sub="singola"]').click();
     
   } catch (err) {
@@ -1686,7 +1644,7 @@ $('fileReceiptAi').addEventListener('change', async e => {
   
   try {
     const imgData = await elaboraBase64(file);
-    const prompt = 'Analizza questa ricevuta o contabile di pagamento. Estrai 4 dati: 1) "importo_dovuto", 2) "commissione", 3) "data" (YYYY-MM-DD), 4) "beneficiario". Rispondi SOLO in JSON: {"importo_dovuto": 141.91, "commissione": 2.00, "data": "2026-10-07", "beneficiario": "Regione Puglia"}. Usa null se manca un dato. Nessun markdown.';
+    const prompt = 'Analizza questa ricevuta o contabile di pagamento. Estrai 4 dati: 1) "importo_dovuto", 2) "commissione", 3) "data" (YYYY-MM-DD), 4) "beneficiario". Rispondi SOLO in JSON: {"importo_dovuto": 141.91, "commissione": 2.00, "data": "2026-10-07", "beneficiario": "UnipolSai"}. Usa null se manca un dato. Nessun markdown.';
     
     const info = await elaboraDocumentoAI(imgData.data, imgData.mime, prompt);
     $('toast').style.display = 'none';
@@ -1740,7 +1698,6 @@ $('importPdfFile').addEventListener('change', async e => {
     const dataMatch = fullText.match(/istanza\s*\d+\s*del\s*(\d{2}[\/\.]\d{2}[\/\.]\d{4})/i);
     const numDoc = docMatch ? docMatch[0] : '';
     const numIst = istMatch ? istMatch[1] : '';
-    const dataIst = dataMatch ? dataMatch[1].replace(/\./g, '/') : '';
 
     let nomePiano = file.name.replace(/\.[^/.]+$/, '');
     if (numDoc && numIst) nomePiano = `Doc. ${numDoc} - Istanza n. ${numIst}`;
@@ -1846,9 +1803,8 @@ function scegliCat(k) {
   $('titolo').placeholder = 'Es. ' + info.es;
   $('ricorrenza').value = String(info.ric);$('boxVerbale').hidden = k !== 'Verbali / Multe';
   
-  // Mostra il box di verifica targa se la categoria è Bollo Auto o Assicurazione
-  const mostraTarga = (k === 'Bollo Auto' || k === 'Assicurazione');
-  $('boxTargaQuery').hidden = !mostraTarga;
+  // Mostra il link di verifica ufficiale RCA solo per Assicurazione
+  $('boxTargaQuery').hidden = (k !== 'Assicurazione');
 
   if (k === 'Verbali / Multe') calcolaVerbale();
   aggiornaRicorrenza();

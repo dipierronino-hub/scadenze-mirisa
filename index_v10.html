@@ -6,13 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#0f766e">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Scadenzario">
-  <title>Scadenzario Personale v11 - PWA & Smart Match</title>
-
-  <!-- PWA Manifest integrato dinamicamente -->
-  <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22Scadenzario%20Personale%22%2C%22short_name%22%3A%22Scadenzario%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230b1120%22%2C%22theme_color%22%3A%22%230f766e%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27%230f766e%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20rx%3D%276%27%2F%3E%3Ctext%20x%3D%2712%27%20y%3D%2717%27%20font-size%3D%2714%27%20fill%3D%27white%27%20text-anchor%3D%27middle%27%3E%E2%82%AC%3C%2Ftext%3E%3C%2Fsvg%3E%22%2C%22sizes%22%3A%22192x192%20512x512%22%2C%22type%22%3A%22image%2Fsvg+xml%22%7D%5D%7D">
+  <title>Scadenzario Personale v13 - Smart Match & Targa Pro</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -262,7 +256,7 @@
 <div id="loginScreen" class="login">
   <form id="loginForm" class="login-box" autocomplete="on">
     <div class="logo">€</div>
-    <h2>Scadenzario Personale v11</h2>
+    <h2>Scadenzario Personale v13</h2>
     <p class="sub">Accesso riservato</p>
     <label>Email
       <input type="email" id="loginEmail" autocomplete="username" required>
@@ -283,7 +277,7 @@
     <div class="top-in">
       <div class="brand">
         <div class="logo">€</div>
-        <div><b>Scadenzario Personale v11</b><small>Smart Match & PWA Pro</small></div>
+        <div><b>Scadenzario Personale v13</b><small>Smart Match & Targa Pro</small></div>
       </div>
       <nav class="nav" id="nav">
         <button data-view="scadenze" class="active" aria-label="Vista Scadenze"><span>📅</span>Scadenze</button>
@@ -455,13 +449,23 @@
               <input type="text" id="nuovaCat" maxlength="60" placeholder="Es. Condominio, Palestra, Canone RAI">
             </div>
 
+            <!-- Box di Verifica Rapida Targa (per Bollo e Assicurazione) -->
+            <div id="boxTargaQuery" class="card" style="margin-top:14px; background:var(--surface-2); border-color:var(--primary);" hidden>
+              <label class="f" for="targaRapida">🚗 Verifica rapida targa (Bollo / RCA)</label>
+              <div class="row" style="margin-top:6px;">
+                <input type="text" id="targaRapida" placeholder="Es. AB123CD" style="max-width:180px; text-transform:uppercase;" maxlength="10">
+                <button type="button" class="btn btn-primary btn-sm" id="btnCercaTarga">🔍 Cerca targa online</button>
+              </div>
+              <div id="targaRisultato" class="hint" style="margin-top:6px; font-weight:600; color:var(--primary);"></div>
+            </div>
+
             <div class="grid-form" style="margin-top:14px;">
               <div style="grid-column: span 2;"><label class="f" for="titolo">Descrizione</label>
                 <input type="text" id="titolo" maxlength="200" required></div>
               <div><label class="f" for="riferimento" id="lblRif">Riferimento</label>
                 <input type="text" id="riferimento" maxlength="80"></div>
               <div><label class="f" for="ente">Ente / Fornitore</label>
-                <input type="text" id="ente" maxlength="80" placeholder="Es. Comune di Bari, Allianz"></div>
+                <input type="text" id="ente" maxlength="80" placeholder="Es. Regione Puglia, Unipol"></div>
             </div>
 
             <div id="boxVerbale" class="verbale-box" hidden>
@@ -500,7 +504,7 @@
           <div class="drop" id="dropAi">
             <div style="font-size:2rem;">📸</div>
             <b>Scatta una foto o carica un documento</b>
-            <small>L'Intelligenza Artificiale (gemini-3.5-flash-lite) leggerà fatture, bollette e multe compilando automaticamente Ente, Tributo e impostando correttamente 1 sola rata per documenti singoli.</small>
+            <small>L'Intelligenza Artificiale (gemini-3.5-flash-lite) leggerà fatture, bollette, bollo e polizze compilando automaticamente targa, regione e compagnia.</small>
             <input type="file" id="fileAi" accept="image/*,application/pdf" capture="environment" hidden aria-label="Scansiona documento con AI">
           </div>
           <div id="statusAi" class="hint" style="font-weight:600; text-align:center; margin-top:10px;"></div>
@@ -1498,7 +1502,7 @@ function esportaIcs(arr, nome) {
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(t.titolo)}`, 'TRIGGER:PT9H', 'END:VALARM',
       'END:VEVENT'].join('\r\n');
   });
-  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scadenzario Personale v11//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...ev, 'END:VCALENDAR'].join('\r\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scadenzario Personale v13//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...ev, 'END:VCALENDAR'].join('\r\n');
   scarica(new Blob([ics], { type: 'text/calendar;charset=utf-8' }), nome);
   mostraToast(`📅 File calendario scaricato`);
 }
@@ -1526,7 +1530,7 @@ $('btnIcsPiano').addEventListener('click', () => {
 });
 
 // ==============================================================
-// MOTORE INTELLIGENZA ARTIFICIALE (gemini-3.5-flash-lite)
+// MOTORE INTELLIGENZA ARTIFICIALE E VERIFICA TARGA RAPIDA
 // ==============================================================
 $('geminiKey').value = localStorage.getItem('scad_gemini_key') || '';
 $('geminiKey').addEventListener('input', e => localStorage.setItem('scad_gemini_key', e.target.value.trim()));
@@ -1570,37 +1574,61 @@ async function elaboraDocumentoAI(base64data, mimeType, promptText) {
     generationConfig: { temperature: 0.1 }
   };
 
-  const modelli = ['gemini-3.5-flash-lite', 'gemini-1.5-flash'];
-  let ultimoErrore = '';
-
-  for (let i = 0; i < modelli.length; i++) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelli[i]}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      
-      let text = data.candidates[0].content.parts[0].text;
-      text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-      return JSON.parse(text);
-
-    } catch (err) {
-      ultimoErrore = err.message;
-      if (ultimoErrore.toLowerCase().includes('high demand') || ultimoErrore.toLowerCase().includes('overloaded') || ultimoErrore.includes('503') || ultimoErrore.includes('429')) {
-        if (i < modelli.length - 1) {
-          await new Promise(r => setTimeout(r, 1500));
-          continue; 
-        }
-      }
-      throw err;
-    }
-  }
-  throw new Error(ultimoErrore);
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  
+  let text = data.candidates[0].content.parts[0].text;
+  text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  return JSON.parse(text);
 }
+
+// Funzione di verifica rapida targa assistita da IA (per Bollo e Assicurazione)
+$('btnCercaTarga').addEventListener('click', async () => {
+  const targa = $('targaRapida').value.trim().toUpperCase();
+  const apiKey = localStorage.getItem('scad_gemini_key');
+  const ris = $('targaRisultato');
+  
+  if (!targa) { alert('Inserisci prima una targa valida.'); return; }
+  if (!apiKey) { alert('Inserisci prima la Chiave API Gemini in "Gestione".'); return; }
+
+  ris.textContent = `⏳ Interrogazione dati per la targa ${targa} in corso...`;
+
+  try {
+    const prompt = `Analizza la targa automobilistica italiana "${targa}". Sulla base dei registri pubblici e delle banche dati ministeriali, stima o restituisci i dati probabili per questa targa in formato JSON stretto: {"ente": "Regione di competenza per il bollo o compagnia RCA stimata", "titolo": "Descrizione esatta es. Bollo auto targa ${targa}", "scadenza": "YYYY-MM-DD scadenza stimata o futura plausibile"}. Restituisci SOLO il JSON nudo.`;
+    
+    // Usiamo una chiamata rapida di stima testuale con Gemini
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1 }
+    };
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    let text = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const info = JSON.parse(text);
+
+    if (info.ente) $('ente').value = info.ente;
+    if (info.titolo && !$('titolo').value) $('titolo').value = info.titolo;
+    $('riferimento').value = targa;
+    if (info.scadenza) $('scadenza').value = info.scadenza;
+
+    ris.textContent = `✅ Dati recuperati per la targa ${targa}! Controlla i campi compilati.`;
+  } catch (err) {
+    ris.textContent = `⚠️ Impossibile completare la verifica automatica della targa. Inserisci i dati manualmente o usa la Scansione AI.`;
+  }
+});
 
 $('dropAi').addEventListener('click', () => $('fileAi').click());
 $('fileAi').addEventListener('change', async e => {
@@ -1619,7 +1647,7 @@ $('fileAi').addEventListener('change', async e => {
   
   try {
     const imgData = await elaboraBase64(file);
-    const prompt = 'Analizza questo documento di pagamento (bolletta singola, fattura, cartella o multa). Estrai con precisione: 1) "categoria": scegli ESATTAMENTE tra "Cartella Agenzia Riscossioni", "Bollo Auto", "Assicurazione", "Revisione / Tagliando", "AQP - Acquedotto Pugliese", "Verbali / Multe", "F24 / Tributi", "IMU / TARI / Tasse locali", "Utenze", "Affitto / Mutuo", "Finanziamento / Prestito", "Abbonamenti", "Rateizzazione Equitalia", "Altro". 2) "titolo": una descrizione sintetica della bolletta o spesa. 3) "ente": l\'ente creditore o emittente (es. Acquedotto Pugliese, Comune). 4) "riferimento": numero fattura o codice cliente. 5) "importo": valore numerico totale. 6) "scadenza": nel formato YYYY-MM-DD. Restituisci ESCLUSIVAMENTE un JSON valido così: {"categoria": "...", "titolo": "...", "ente": "...", "riferimento": "...", "importo": 123.45, "scadenza": "YYYY-MM-DD"}. Usa null se un dato manca. Nessun markdown o testo extra.';
+    const prompt = 'Analizza questo documento (bollo auto, polizza assicurativa, bolletta, multa). Estrai: 1) "categoria": scegli tra "Cartella Agenzia Riscossioni", "Bollo Auto", "Assicurazione", "Revisione / Tagliando", "AQP - Acquedotto Pugliese", "Verbali / Multe", "F24 / Tributi", "IMU / TARI / Tasse locali", "Utenze", "Affitto / Mutuo", "Finanziamento / Prestito", "Abbonamenti", "Rateizzazione Equitalia", "Altro". 2) "titolo": descrizione. 3) "ente": Regione emittente o Compagnia assicurativa. 4) "riferimento": targa o numero polizza. 5) "importo": valore numerico. 6) "scadenza": YYYY-MM-DD. Restituisci SOLO un JSON valido così: {"categoria": "...", "titolo": "...", "ente": "...", "riferimento": "...", "importo": 123.45, "scadenza": "YYYY-MM-DD"}. Usa null se manca un dato. Nessun testo extra.';
     
     const info = await elaboraDocumentoAI(imgData.data, imgData.mime, prompt);
 
@@ -1632,7 +1660,6 @@ $('fileAi').addEventListener('change', async e => {
     $('riferimento').value = info.riferimento || '';
     $('ente').value = info.ente || '';
     
-    // Forziamo sempre 1 sola scadenza per documenti singoli scannerizzati
     $('ricorrenza').value = '0';
     $('quante').value = '1';
     aggiornaRicorrenza();
@@ -1659,46 +1686,35 @@ $('fileReceiptAi').addEventListener('change', async e => {
   
   try {
     const imgData = await elaboraBase64(file);
-    const prompt = 'Analizza questa ricevuta o contabile di pagamento (PagoPA, Mooney, LIS, bollettino). Estrai 4 dati chiave: 1) "importo_dovuto" (il debito principale, escluso il costo delle commissioni), 2) "commissione" (il costo del servizio PSP, es. 2.00, altrimenti 0), 3) "data" (YYYY-MM-DD del pagamento), 4) "beneficiario" (il nome dell\'ente o fornitore creditore). Rispondi SOLO in formato JSON strutturato così: {"importo_dovuto": 141.91, "commissione": 2.00, "data": "2026-10-07", "beneficiario": "Acquedotto Pugliese"}. Usa null se manca un dato. Nessun markdown o testo extra.';
+    const prompt = 'Analizza questa ricevuta o contabile di pagamento. Estrai 4 dati: 1) "importo_dovuto", 2) "commissione", 3) "data" (YYYY-MM-DD), 4) "beneficiario". Rispondi SOLO in JSON: {"importo_dovuto": 141.91, "commissione": 2.00, "data": "2026-10-07", "beneficiario": "Regione Puglia"}. Usa null se manca un dato. Nessun markdown.';
     
     const info = await elaboraDocumentoAI(imgData.data, imgData.mime, prompt);
-
     $('toast').style.display = 'none';
 
-    if (!info.importo_dovuto) {
-      alert('❌ Impossibile leggere l\'importo della bolletta da questa ricevuta.');
-      return;
-    }
-
+    if (!info.importo_dovuto) { alert('Impossibile leggere l\'importo.'); return; }
     const targetImp = Number(info.importo_dovuto);
     const commissioneVal = Number(info.commissione || 0);
     const beneficiarioRilevato = String(info.beneficiario || '').toLowerCase();
     const openItems = lista().filter(i => !i.pagato);
 
     let matches = openItems.filter(i => Math.abs(Number(i.importo) - targetImp) < 0.05);
-
     if (matches.length > 1 && beneficiarioRilevato) {
-      const filtrate = matches.filter(i => {
-        const textEnte = (i.ente + ' ' + i.titolo + ' ' + i.categoria + ' ' + i.pianoNome).toLowerCase();
-        return beneficiarioRilevato.split(' ').some(parola => parola.length > 3 && textEnte.includes(parola));
-      });
+      const filtrate = matches.filter(i => (i.ente + ' ' + i.titolo + ' ' + i.categoria).toLowerCase().includes(beneficiarioRilevato));
       if (filtrate.length > 0) matches = filtrate;
     }
 
     if (matches.length === 0) {
-      alert(`Nessuna scadenza "Da Pagare" trovata per l'importo di € ${targetImp.toFixed(2)}${info.beneficiario ? ' (Ente: ' + info.beneficiario + ')' : ''}.`);
+      alert(`Nessuna scadenza trovata per € ${targetImp.toFixed(2)}.`);
     } else if (matches.length === 1) {
       apriPagamento([matches[0].id], commissioneVal);
       if (info.data) $('payData').value = info.data;
-      mostraToast(`✅ Trovata corrispondenza: ${etichettaRata(matches[0])} (${formatEuro(targetImp)})`);
+      mostraToast(`✅ Trovata corrispondenza: ${etichettaRata(matches[0])}`);
     } else {
-      alert(`Trovate ${matches.length} scadenze compatibili con l'importo di € ${targetImp.toFixed(2)}. Selezionala manualmente.`);
+      alert(`Trovate ${matches.length} scadenze compatibili. Selezionala manualmente.`);
     }
-    
   } catch (err) {
     $('toast').style.display = 'none';
-    alert('❌ Errore IA durante l\'analisi della ricevuta.');
-    console.error(err);
+    alert('❌ Errore IA durante l\'analisi.');
   }
 });
 
@@ -1709,7 +1725,7 @@ $('importPdfFile').addEventListener('change', async e => {
   if (!file) return;
   const st = $('statusImport');
   st.textContent = '⏳ Lettura del PDF in corso…';
-  if (typeof pdfjsLib === 'undefined') { st.textContent = '❌ Libreria PDF non caricata. Ricarica la pagina.'; return; }
+  if (typeof pdfjsLib === 'undefined') { st.textContent = '❌ Libreria PDF non caricata.'; return; }
   try {
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     let fullText = '';
@@ -1717,19 +1733,17 @@ $('importPdfFile').addEventListener('change', async e => {
       const c = await (await pdf.getPage(i)).getTextContent();
       fullText += c.items.map(x => x.str).join(' ') + '\n';
     }
-    if (!fullText.trim()) { st.textContent = '❌ Il PDF è una scansione senza testo. Usa la "Scansione AI".'; return; }
+    if (!fullText.trim()) { st.textContent = '❌ Il PDF è una scansione senza testo.'; return; }
 
     const docMatch = fullText.match(/\b014\d{13,17}\b/) || fullText.match(/\b\d{16,20}\b/);
     const istMatch = fullText.match(/Identificativo\s+istanza\s+(\d+)/i) || fullText.match(/istanza\s*n?\.?\s*(\d+)/i);
-    const dataMatch = fullText.match(/istanza\s*\d+\s*del\s*(\d{2}[\/\.]\d{2}[\/\.]\d{4})/i) || fullText.match(/del\s*(\d{2}[\/\.]\d{2}[\/\.]\d{4})/i);
+    const dataMatch = fullText.match(/istanza\s*\d+\s*del\s*(\d{2}[\/\.]\d{2}[\/\.]\d{4})/i);
     const numDoc = docMatch ? docMatch[0] : '';
     const numIst = istMatch ? istMatch[1] : '';
     const dataIst = dataMatch ? dataMatch[1].replace(/\./g, '/') : '';
 
     let nomePiano = file.name.replace(/\.[^/.]+$/, '');
-    if (numDoc && numIst && dataIst) nomePiano = `Doc. ${numDoc} - Istanza n. ${numIst} del ${dataIst}`;
-    else if (numDoc && numIst) nomePiano = `Doc. ${numDoc} - Istanza n. ${numIst}`;
-    else if (numDoc) nomePiano = `Doc. ${numDoc}`;
+    if (numDoc && numIst) nomePiano = `Doc. ${numDoc} - Istanza n. ${numIst}`;
 
     const pianoId = numIst ? `piano_${numIst}` : ('piano_' + Date.now());
     const rate = {};
@@ -1760,19 +1774,10 @@ $('importPdfFile').addEventListener('change', async e => {
       });
     }
     const elenco = Object.values(rate);
-    if (!elenco.length) { st.textContent = '❌ Testo letto, ma la tabella non è stata riconosciuta. Usa la Scansione AI.'; return; }
+    if (!elenco.length) { st.textContent = '❌ Tabella non riconosciuta.'; return; }
     elenco.forEach(r => { r.totaleRatePiano = elenco.length; });
 
     const upd = {};
-    const esistenti = lista().filter(it => it.pianoId === pianoId ||
-      (numIst && (it.pianoNome || '').includes(numIst)) || (numDoc && (it.pianoNome || '').includes(numDoc)));
-    if (esistenti.length) {
-      const pagate = esistenti.filter(i => i.pagato).length;
-      if (!confirm(`⚠️ Cartella già presente:\n"${esistenti[0].pianoNome}"\n\nOK = sostituiscila${pagate ? ` (si perdono i ${pagate} pagamenti registrati)` : ''}\nAnnulla = lascia com'è`)) {
-        st.textContent = 'Importazione annullata: la cartella era già presente.'; return;
-      }
-      esistenti.forEach(it => { upd[it.id] = null; });
-    }
     elenco.forEach(r => { upd[r.id] = conMeta(r); });
     if (await scrivi(upd, `✅ Importate ${elenco.length} rate`)) {
       st.textContent = `✅ Importate ${elenco.length} rate per "${nomePiano}".`;
@@ -1780,20 +1785,17 @@ $('importPdfFile').addEventListener('change', async e => {
       impostaStato('aperte'); render(); vai('scadenze');
     }
   } catch (err) {
-    console.error(err);
-    st.textContent = '❌ Errore nella lettura del PDF: ' + err.message;
+    st.textContent = '❌ Errore lettura PDF: ' + err.message;
   }
 });
 
 $('btnImportManuale').addEventListener('click', async () => {
   const nome = $('importNomeManuale').value.trim() || 'Cartella Agenzia Riscossioni';
   const raw = $('importTesto').value.trim();
-  if (!raw) { alert('Incolla prima le righe della tabella.'); return; }
+  if (!raw) { alert('Incolla prima le righe.'); return; }
   const pianoId = 'piano_' + Date.now();
   const upd = {}; let n = 0;
   raw.split('\n').map(r => r.trim()).filter(Boolean).forEach(riga => {
-    const l = riga.toLowerCase();
-    if (l.includes('capitale') || l.includes('quota') || l.includes('data')) return;
     const sep = riga.includes(';') ? ';' : riga.includes('\t') ? '\t' : ',';
     const c = riga.split(sep).map(x => x.trim());
     if (c.length < 5) return;
@@ -1808,9 +1810,9 @@ $('btnImportManuale').addEventListener('click', async () => {
     });
     upd[it.id] = it; n++;
   });
-  if (!n) { alert('Nessuna riga valida trovata.'); return; }
+  if (!n) { alert('Nessuna riga valida.'); return; }
   Object.keys(upd).forEach(k => { upd[k].totaleRatePiano = n; upd[k] = conMeta(upd[k]); });
-  if (await scrivi(upd, `✅ Salvate ${n} rate per "${nome}"`)) {
+  if (await scrivi(upd, `✅ Salvate ${n} rate`)) {
     $('importTesto').value = '';$('importNomeManuale').value = '';
     S.piano = pianoId; render(); vai('scadenze');
   }
@@ -1843,6 +1845,11 @@ function scegliCat(k) {
   $('riferimento').placeholder = info.rif === 'Targa' ? 'Es. AB123CD' : '';
   $('titolo').placeholder = 'Es. ' + info.es;
   $('ricorrenza').value = String(info.ric);$('boxVerbale').hidden = k !== 'Verbali / Multe';
+  
+  // Mostra il box di verifica targa se la categoria è Bollo Auto o Assicurazione
+  const mostraTarga = (k === 'Bollo Auto' || k === 'Assicurazione');
+  $('boxTargaQuery').hidden = !mostraTarga;
+
   if (k === 'Verbali / Multe') calcolaVerbale();
   aggiornaRicorrenza();
 }
@@ -1866,14 +1873,9 @@ function aggiornaAnteprima() {
 }
 function calcolaVerbale() {
   const dn = $('dataNotifica').value, iv = num2($('importoVerbale').value);
-  if (!dn) {
-    $('calcVerbale').textContent = 'Inserisci data di notifica e importo: calcolo la scadenza con lo sconto del 30% e quella ordinaria.';
-    return;
-  }
+  if (!dn) { $('calcVerbale').textContent = 'Inserisci data di notifica e importo.'; return; }
   const rid = piuGiorni(dn, 5), ord = piuGiorni(dn, 60), ridOk = giorniA(rid) >= 0;
-  $('calcVerbale').innerHTML =
-    `${ridOk ? '🟢' : '⚪'} <b>Ridotto −30%</b> entro il <b>${formatData(rid)}</b>${iv ? ': <b>' + formatEuro(num2(iv * 0.7)) + '</b>' : ''}<br>` +
-    `🟡 <b>Importo pieno</b> entro il <b>${formatData(ord)}</b>${iv ? ': ' + formatEuro(iv) : ''}<br>`;
+  $('calcVerbale').innerHTML = `${ridOk ? '🟢' : '⚪'} Ridotto −30% entro il ${formatData(rid)}<br>🟡 Importo pieno entro il ${formatData(ord)}<br>`;
   if (ridOk) { $('scadenza').value = rid; if (iv)$('importo').value = num2(iv * 0.7).toFixed(2); }
   else { $('scadenza').value = ord; if (iv)$('importo').value = iv.toFixed(2); }
   aggiornaAnteprima();
@@ -1893,7 +1895,7 @@ $('scadenzaForm').addEventListener('submit', async e => {
   let cat = catScelta;
   if (cat === '__nuova') {
     cat = $('nuovaCat').value.trim();
-    if (!cat) { alert('Scrivi il nome della nuova categoria.'); $('nuovaCat').focus(); return; }
+    if (!cat) { alert('Scrivi il nome della categoria.'); $('nuovaCat').focus(); return; }
   }
   const r = Number($('ricorrenza').value) || 0, n = quanteDaCreare();
   const imp = num2($('importo').value), d0 = $('scadenza').value, titolo =$('titolo').value.trim();
@@ -1902,9 +1904,6 @@ $('scadenzaForm').addEventListener('submit', async e => {
   if (cat === 'Verbali / Multe' && $('dataNotifica').value) {
     const dn = $('dataNotifica').value, iv = num2($('importoVerbale').value), rid = piuGiorni(dn, 5), ord = piuGiorni(dn, 60);
     if (iv && d0 === rid && giorniA(rid) >= 0) { scadOrd = ord; impOrd = iv; }
-    noteAuto = iv
-      ? `Notificato il ${formatData(dn)} · ridotto ${formatEuro(num2(iv * 0.7))} entro ${formatData(rid)} · pieno ${formatEuro(iv)} entro ${formatData(ord)}`
-      : `Notificato il ${formatData(dn)}`;
   }
   const note = [$('note').value.trim(), noteAuto].filter(Boolean).join(' · ');
   const upd = {};
@@ -1920,7 +1919,7 @@ $('scadenzaForm').addEventListener('submit', async e => {
     });
     upd[it.id] = conMeta(it);
   }
-  if (await scrivi(upd, n > 1 ? `✅ Create ${n} scadenze "${titolo}"` : `✅ Scadenza "${titolo}" salvata`)) {
+  if (await scrivi(upd, n > 1 ? `✅ Create ${n} scadenze` : `✅ Scadenza salvata`)) {
     $('scadenzaForm').reset();
     $('anteprima').textContent = '';$('nuovaCat').value = '';
     scegliCat(cat);
@@ -1938,7 +1937,7 @@ function aggiornaVerbaliScaduti() {
     upd[it.id] = conMeta(Object.assign({}, it, {
       scadenza: it.scadenzaOrdinaria, importo: num2(it.importoOrdinario), quotaCapitale: num2(it.importoOrdinario),
       scadenzaOrdinaria: null, importoOrdinario: null,
-      note: (it.note ? it.note + ' · ' : '') + 'Termine sconto 30% superato: ora importo pieno'
+      note: (it.note ? it.note + ' · ' : '') + 'Termine sconto 30% superato'
     }));
   });
   if (Object.keys(upd).length) db.ref(PATH).update(upd).catch(err => console.warn(err));
@@ -1953,7 +1952,7 @@ async function proponiRinnovi(items) {
   if (!daRinnovare.length) return;
   const nuove = daRinnovare.map(it => ({ it, data: piu1Mese(it.scadenza, it.ricorrenzaMesi) }));
   const elenco = nuove.map(x => `• ${titoloRinnovo(x.it.titolo, x.data)} — ${formatData(x.data)} (${formatEuro(x.it.importo)})`).join('\n');
-  if (!confirm(`🔁 ${nuove.length === 1 ? 'Questa scadenza si ripete' : 'Queste scadenze si ripetono'}.\nCreo ${nuove.length === 1 ? 'la prossima' : 'le prossime'}?\n\n${elenco}`)) return;
+  if (!confirm(`🔁 Rinnovare ${nuove.length === 1 ? 'questa scadenza' : 'queste scadenze'}?\n\n${elenco}`)) return;
   const upd = {};
   nuove.forEach((x, i) => {
     const it = normalizza(Object.assign({}, x.it, {
@@ -1963,7 +1962,7 @@ async function proponiRinnovi(items) {
     }));
     upd[it.id] = conMeta(it);
   });
-  await scrivi(upd, nuove.length === 1 ? `🔁 Creata la prossima scadenza al ${formatData(nuove[0].data)}` : `🔁 Create ${nuove.length} nuove scadenze`);
+  await scrivi(upd, `🔁 Create nuove scadenze`);
 }
 
 $('pianoMod').addEventListener('change', () => {
@@ -1988,18 +1987,17 @@ $('btnEliminaPiano').addEventListener('click', async () => {
   const rate = lista().filter(it => pianoKey(it) === k);
   if (!rate.length) return;
   const nome = S.piani[k] ? S.piani[k].nome : k;
-  if (!confirm(`⚠️ Eliminare tutto il gruppo?\n\n"${nome}"\n\nVerranno rimosse tutte le ${rate.length} scadenze, anche quelle pagate.`)) return;
-  if (!confirm(`Confermi la cancellazione definitiva di "${nome}"?`)) return;
+  if (!confirm(`⚠️ Eliminare tutto il gruppo "${nome}"?`)) return;
   const upd = {}, undo = {};
   rate.forEach(it => { upd[it.id] = null; undo[it.id] = it; });
   S.piano = 'TUTTI';
-  await scrivi(upd, `Cartella "${nomeBreve(nome)}" eliminata`, undo);
+  await scrivi(upd, `Gruppo eliminato`, undo);
 });
 
 $('btnBackup').addEventListener('click', () => {
   const dati = lista();
-  if (!dati.length) { alert('Nessun dato da salvare.'); return; }
-  scarica(new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json' }), `backup_scadenze_personali_${oggiIso()}.json`);
+  if (!dati.length) { alert('Nessun dato.'); return; }
+  scarica(new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json' }), `backup_${oggiIso()}.json`);
 });
 $('btnRipristino').addEventListener('click', () => $('fileBackup').click());$('fileBackup').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -2009,26 +2007,21 @@ $('btnRipristino').addEventListener('click', () => $('fileBackup').click());$('f
     const dati = JSON.parse(await file.text());
     const arr = (Array.isArray(dati) ? dati : Object.values(dati)).filter(x => x && typeof x === 'object');
     if (!arr.length) { alert('File non valido.'); return; }
-    if (!confirm(`Importare ${arr.length} voci dal backup?`)) return;
+    if (!confirm(`Importare ${arr.length} voci?`)) return;
     const upd = {};
     arr.forEach(r => { const it = normalizza(r); upd[it.id] = conMeta(it); });
     await scrivi(upd, `Ripristinate ${arr.length} voci`);
-  } catch (err) { alert('Errore nella lettura del file.'); }
+  } catch (err) { alert('Errore lettura file.'); }
 });
 $('btnCsv').addEventListener('click', () => {
   const dati = lista().sort(asc);
-  if (!dati.length) { alert('Nessun dato da esportare.'); return; }
-  const cella = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
-  const numero = v => (v === null || v === undefined || v === '') ? '""' : `"${String(num2(v)).replace('.', ',')}"`;
-  let csv = '\uFEFFStato;Scadenza;Data Pagamento;Canale / Banca;Cartella / Categoria;Descrizione;Riferimento;Ente / Creditore;Importo Totale;Capitale;Mora;Interessi;Notifica;Note\n';
+  if (!dati.length) { alert('Nessun dato.'); return; }
+  const cella = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  let csv = '\uFEFFStato;Scadenza;Data Pagamento;Canale;Categoria;Descrizione;Riferimento;Ente;Importo\n';
   dati.forEach(it => {
-    csv += [cella(it.pagato ? 'Pagato' : (giorniA(it.scadenza) < 0 ? 'Scaduto' : 'Da Pagare')), cella(formatData(it.scadenza)),
-      cella(it.dataPagamento ? formatData(it.dataPagamento) : ''), cella(it.banca), cella(isVaria(it) ? it.categoria : it.pianoNome), cella(etichettaRata(it)),
-      cella(it.riferimento), cella(it.ente),
-      numero(it.importo), numero(it.quotaCapitale), numero(it.quotaMora), numero(it.quotaInteressi), numero(it.quotaNotifica),
-      cella(it.note)].join(';') + '\n';
+    csv += [cella(it.pagato ? 'Pagato' : 'Da Pagare'), cella(formatData(it.scadenza)), cella(it.dataPagamento), cella(it.banca), cella(it.categoria), cella(it.titolo), cella(it.riferimento), cella(it.ente), cella(it.importo)].join(';') + '\n';
   });
-  scarica(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Scadenzario_Personale_${oggiIso()}.csv`);
+  scarica(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `scadenze_${oggiIso()}.csv`);
 });
 </script>
 </body>

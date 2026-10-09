@@ -523,6 +523,10 @@
             <div><label class="f" for="mutuoPagateFino">Rate già pagate fino alla n. (facoltativo)</label>
               <input type="number" id="mutuoPagateFino" min="0" max="999" step="1" placeholder="Es. 51"></div>
           </div>
+          <div class="grid-form" style="margin-bottom:10px;">
+            <div><label class="f" for="mutuoBanca">Banca di addebito delle rate</label>
+              <select id="mutuoBanca"></select></div>
+          </div>
           <div class="row"><button class="btn btn-primary" id="btnMutuoPdf">📄 Carica PDF piano di ammortamento</button></div>
           <input type="file" id="importMutuoFile" accept=".pdf" hidden>
           <div id="statusMutuo" class="hint" style="font-weight:600;"></div>
@@ -744,7 +748,6 @@ const CATEGORIE = [
 const ICONA_ADER = '📑';
 const ICONA_MUTUO = '🏦';
 const CAT_MUTUO = 'Mutuo';
-const BANCA_ADDEBITO_MUTUI = 'BANCA POPOLARE PUGLIESE'; // conto da cui vengono addebitate le rate dei mutui
 const MUTUO_PDF_MAX_BYTES = 600 * 1024; // il PDF del piano viene archiviato (una sola copia) solo se non supera questa dimensione
 function isMutuo(it) { return !isVaria(it) && it.categoria === CAT_MUTUO; }
 function infoCat(k) { return CATEGORIE.find(c => c.k === k) || { k, i: '📌', rif: 'Riferimento', es: 'Descrizione', ric: 0 }; }
@@ -1836,6 +1839,7 @@ function aggiornaBtnPdfPiano() {
   $('btnPdfPiano').hidden = !(p && p.pdfPiano);
 }
 
+$('mutuoBanca').innerHTML = '<option value="">— seleziona la banca —</option>' + BANCHE.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
 $('btnMutuoPdf').addEventListener('click', () => $('importMutuoFile').click());
 $('btnPdfPiano').addEventListener('click', () => {
   const p = S.piani[$('pianoMod').value];
@@ -1862,6 +1866,7 @@ $('importMutuoFile').addEventListener('change', async e => {
     const base = file.name.replace(/\.[^/.]+$/, '');
     const nome = 'Mutuo · ' + base.replace(/_/g, ' ').trim();
     const pianoId = 'mutuo_' + chiave(base.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+    const bancaMutuo = $('mutuoBanca').value;
     const somma = k => rate.reduce((s, r) => s + (Number(r[k]) || 0), 0);
 
     const upd = {};
@@ -1883,7 +1888,7 @@ $('importMutuoFile').addEventListener('change', async e => {
         id: r.id, pianoId, pianoNome: nome, numeroRata: r.n > 0 ? r.n : null, totaleRatePiano: r.n > 0 ? totRate : null,
         titolo: r.n > 0 ? `${nome} - Rata ${r.n}` : `${nome} - Preammortamento ${nPre}`, categoria: CAT_MUTUO, importo: r.rata, quotaCapitale: r.capitale,
         quotaMora: r.mora, quotaInteressi: r.interessi, quotaNotifica: 0, scadenza: r.scadenza,
-        pagato: r.pagata, dataPagamento: r.pagata ? r.scadenza : null, banca: r.pagata ? BANCA_ADDEBITO_MUTUI : null, debitoResiduo: r.residuo,
+        pagato: r.pagata, dataPagamento: r.pagata ? r.scadenza : null, banca: r.pagata ? (bancaMutuo || null) : null, debitoResiduo: r.residuo,
         note: [r.pagata ? 'Pagata secondo il piano (data di pagamento = scadenza)' : '', r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''].filter(Boolean).join(' · ')
       });
       upd[it.id] = conMeta(it);
@@ -1892,6 +1897,7 @@ $('importMutuoFile').addEventListener('change', async e => {
 
     const msg = `✅ Importate ${totRate} rate${pre ? ` e ${pre} di preammortamento` : ''} (${rate.filter(r => r.pagata).length} già pagate) · capitale ${formatEuro(somma('capitale'))} · interessi ${formatEuro(somma('interessi'))}` +
       (mancanti.length ? ` · ⚠️ rate non lette: ${mancanti.join(', ')}` : '') +
+      (rate.some(r => r.pagata) && !bancaMutuo ? ' · ⚠️ banca non indicata' : '') +
       (pdfB64 ? '' : ' · PDF oltre 600 KB: non archiviato');
     if (await scrivi(upd, msg)) {
       st.textContent = msg;

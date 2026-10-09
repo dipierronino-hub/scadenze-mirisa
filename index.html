@@ -1776,8 +1776,8 @@ $('importMutuoFile').addEventListener('change', async e => {
         id: r.id, pianoId, pianoNome: nome, numeroRata: r.n > 0 ? r.n : null, totaleRatePiano: r.n > 0 ? totRate : null,
         titolo: r.n > 0 ? `${nome} - Rata ${r.n}` : `${nome} - Preammortamento ${nPre}`, categoria: CAT_MUTUO, importo: r.rata, quotaCapitale: r.capitale,
         quotaMora: r.mora, quotaInteressi: r.interessi, quotaNotifica: 0, scadenza: r.scadenza,
-        pagato: r.pagata, debitoResiduo: r.residuo,
-        note: [r.pagata ? 'Pagata secondo il piano' : '', r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''].filter(Boolean).join(' · ')
+        pagato: r.pagata, dataPagamento: r.pagata ? r.scadenza : null, debitoResiduo: r.residuo,
+        note: [r.pagata ? 'Pagata secondo il piano (data di pagamento = scadenza)' : '', r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''].filter(Boolean).join(' · ')
       });
       upd[it.id] = conMeta(it);
     });

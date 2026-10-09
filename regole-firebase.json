@@ -1,0 +1,24 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "utenti_autorizzati": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "scadenze_v2": {
+      ".read": "auth != null && root.child('utenti_autorizzati').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('utenti_autorizzati').child(auth.uid).val() === true",
+      "$id": {
+        ".validate": "newData.hasChildren(['id', 'titolo', 'importo', 'scadenza', 'pagato']) && newData.child('importo').isNumber() && newData.child('pagato').isBoolean() && newData.child('scadenza').isString() && newData.child('scadenza').val().length <= 10 && newData.child('titolo').isString() && newData.child('titolo').val().length <= 500"
+      }
+    },
+
+    "archivio_scadenze": {
+      ".read": "auth != null && root.child('utenti_autorizzati').child(auth.uid).val() === true"
+    }
+  }
+}

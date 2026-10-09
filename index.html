@@ -14,6 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="Scadenze">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -1701,6 +1702,32 @@ function bancaDaPsp(psp) {
   if (p.includes('pugliese')) return 'BANCA POPOLARE PUGLIESE';
   return 'Altro / Cassa';
 }
+// PDF pesante: ogni pagina viene ridisegnata come immagine JPEG compressa, poi ricomposta in un PDF leggero.
+// Il testo non resta selezionabile, ma la quietanza è leggibile. Prova qualità decrescenti fino a rientrare nel limite.
+async function alleggeriscPdf(file) {
+  if (typeof window.jspdf === 'undefined') throw new Error('libreria di compressione non caricata');
+  const { jsPDF } = window.jspdf;
+  const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  for (const [scala, qualita] of [[1.5, 0.7], [1.2, 0.6], [1.0, 0.5]]) {
+    let doc = null;
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const vp = page.getViewport({ scale: scala });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      const img = canvas.toDataURL('image/jpeg', qualita);
+      const wPt = vp.width / scala, hPt = vp.height / scala, orient = wPt > hPt ? 'l' : 'p';
+      if (!doc) doc = new jsPDF({ unit: 'pt', format: [wPt, hPt], orientation: orient, compress: true });
+      else doc.addPage([wPt, hPt], orient);
+      doc.addImage(img, 'JPEG', 0, 0, wPt, hPt);
+    }
+    const blob = doc.output('blob');
+    if (blob.size <= PDF_MAX_BYTES) return blob;
+  }
+  return null;
+}
+
 function fileToBase64(file) {
   return new Promise((ok, ko) => {
     const r = new FileReader();
@@ -1796,7 +1823,12 @@ $('quietanzaFile').addEventListener('change', async e => {
     if (!q.importo || !q.dataPagamento) { st.textContent = '❌ Importo o data di pagamento non leggibili in questa quietanza.'; return; }
     const it = rataPerAvviso(q.avviso, q.iuv);
     if (!it) { st.textContent = `❌ Nessuna rata con codice avviso ${q.avviso}. Importa prima il modulo di pagamento.`; return; }
-    const pdfB64 = file.size <= PDF_MAX_BYTES ? await fileToBase64(file) : null;
+    let daArchiviare = file.size <= PDF_MAX_BYTES ? file : null;
+    if (!daArchiviare) {
+      st.textContent = '⏳ PDF pesante: lo alleggerisco per l\'archivio…';
+      daArchiviare = await alleggeriscPdf(file);
+    }
+    const pdfB64 = daArchiviare ? await fileToBase64(daArchiviare) : null;
     apriPagamento([it.id]);
     ricevutaPendente = {
       avviso: q.avviso, iuv: q.iuv, idTransazione: q.idTransazione, psp: q.psp,

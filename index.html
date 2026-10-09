@@ -1716,16 +1716,17 @@ function dataMutuo(s) {
 function parseAmmortamentoMutuo(testo, pagateFino = 0) {
   const haResiduo = /debito\s*residuo/i.test(testo);
   // Riga: N. [stato] data importi... (importi o "-"). Il numero 0 sono le rate di preammortamento (solo interessi).
-  const re = /(?:^|\s)(\d{1,3})\s+(?:([A-Z])\s+)?(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})((?:\s+€?\s*(?:\d+(?:\.\d{3})*,\s?\d{2}|-))+)/g;
+  // Lo stato (P = pagata) può stare prima o dopo la data, a seconda di come il PDF è estratto
+  const re = /(?:^|\s)(\d{1,3})\s+(?:([A-Z])\s+)?(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})(?:\s+([A-Z])(?=\s))?((?:\s+€?\s*(?:\d+(?:\.\d{3})*,\s?\d{2}|-))+)/g;
   const trovate = new Map();
   let m;
   while ((m = re.exec(testo)) !== null) {
     const n = parseInt(m[1], 10), scadenza = dataMutuo(m[3]), chiaveRiga = `${n}|${scadenza}`;
     if (trovate.has(chiaveRiga)) continue;
-    const importi = (m[4].match(/\d+(?:\.\d{3})*,\s?\d{2}|-/g) || [])
+    const importi = (m[5].match(/\d+(?:\.\d{3})*,\s?\d{2}|-/g) || [])
       .map(x => x === '-' ? 0 : parseValore(x.replace(/\s/g, '')));
     const riga = scomponiRataMutuo(importi, haResiduo);
-    const pagata = m[2] === 'P' || (n > 0 && pagateFino > 0 && n <= pagateFino);
+    const pagata = m[2] === 'P' || m[4] === 'P' || (n > 0 && pagateFino > 0 && n <= pagateFino);
     if (riga) trovate.set(chiaveRiga, Object.assign({ n, scadenza, pagata }, riga));
   }
   return [...trovate.values()].sort((a, b) => a.scadenza.localeCompare(b.scadenza) || a.n - b.n);

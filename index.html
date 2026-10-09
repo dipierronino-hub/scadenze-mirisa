@@ -294,6 +294,7 @@
         <button data-view="scadenze" class="active"><span>📅</span>Scadenze</button>
         <button data-view="riepiloghi"><span>📊</span>Riepiloghi</button>
         <button data-view="aggiungi"><span>➕</span>Aggiungi</button>
+        <button data-view="archivio"><span>🗄️</span>Archivio</button>
         <button data-view="gestione"><span>⚙️</span>Gestione</button>
       </nav>
       <div class="top-right">
@@ -541,6 +542,15 @@
     </section>
 
     <!-- ======== GESTIONE ======== -->
+    <section id="view-archivio" hidden>
+      <div class="card">
+        <div class="card-h"><h3>Archivio documenti</h3></div>
+        <input type="search" id="archCerca" placeholder="Cerca per piano, rata, banca, codice avviso…" maxlength="100" style="width:100%;">
+        <p id="archInfo" class="hint"></p>
+        <div id="archLista"></div>
+      </div>
+    </section>
+
     <section id="view-gestione" hidden>
       <div class="card">
         <div class="card-h"><h3>Cartelle AdER e categorie</h3></div>
@@ -804,7 +814,8 @@ function normalizza(r) {
     ricorrenzaMesi: Number(r.ricorrenzaMesi) || 0,
     serie: r.serie ? String(r.serie) : null,
     codiceAvviso: r.codiceAvviso ? String(r.codiceAvviso) : null,
-    ricevuta: r.ricevuta && typeof r.ricevuta === 'object' ? r.ricevuta : null
+    ricevuta: r.ricevuta && typeof r.ricevuta === 'object' ? r.ricevuta : null,
+    modulo: r.modulo && typeof r.modulo === 'object' ? r.modulo : null
   };
 }
 function conMeta(it) {
@@ -1331,7 +1342,8 @@ function renderRiepiloghi() {
 // ==============================================================
 function vai(v) {
   S.vista = v;
-  ['scadenze', 'riepiloghi', 'aggiungi', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
+  ['scadenze', 'riepiloghi', 'aggiungi', 'archivio', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
+  if (v === 'archivio') renderArchivio();
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   $('contextBar').hidden = !(v === 'scadenze' || v === 'riepiloghi');
   $('bulkBar').style.visibility = v === 'scadenze' ? 'visible' : 'hidden';
@@ -1791,12 +1803,17 @@ $('importModuloFile').addEventListener('change', async e => {
   try {
     const { ist, moduli } = parseModulo(await leggiTestoPdf(file));
     if (!moduli.length) { st.textContent = '❌ Nessun codice avviso trovato in questo PDF.'; return; }
+    // Il PDF del modulo viene archiviato nelle rate collegate (alleggerito se pesante)
+    let daSalvare = file.size <= PDF_MAX_BYTES ? file : null;
+    if (!daSalvare) { st.textContent = '⏳ PDF pesante: lo alleggerisco per l\'archivio…'; daSalvare = await alleggeriscPdf(file); }
+    const moduloB64 = daSalvare ? await fileToBase64(daSalvare) : null;
     const upd = {}, righe = [];
     moduli.forEach(mod => {
       const trovata = trovaRataPerModulo(mod, ist);
       if (!trovata) { righe.push(`❌ Rata ${mod.rata} del ${formatData(mod.scadenza)}: nessuna rata corrispondente nell'app`); return; }
       const it = trovata.it;
-      upd[it.id] = conMeta(Object.assign({}, it, { codiceAvviso: mod.codiceAvviso }));
+      upd[it.id] = conMeta(Object.assign({}, it, { codiceAvviso: mod.codiceAvviso },
+        moduloB64 ? { modulo: { nomeFile: file.name, pdf: moduloB64 } } : {}));
       const avv = trovata.esatta ? '' : ' · ⚠️ scadenza diversa, verifica';
       const imp = Math.abs(it.importo - mod.importo) > 0.005 ? ' · ⚠️ importo diverso dal modulo' : '';
       righe.push(`✅ ${etichettaRata(it)} · ${formatData(it.scadenza)} · ${formatEuro(it.importo)} → codice ${mod.codiceAvviso}${avv}${imp}`);
@@ -1855,6 +1872,57 @@ function apriQuietanzaArchiviata(id) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   scarica(new Blob([bytes], { type: 'application/pdf' }), it.ricevuta.nomeFile || 'quietanza.pdf');
 }
+
+// ---------- Archivio documenti (quietanze e moduli di pagamento) ----------
+let archDocs = [];
+function documentiArchivio() {
+  const out = [];
+  lista().forEach(it => {
+    if (it.ricevuta && it.ricevuta.pdf) out.push({
+      it, tipo: 'Quietanza', nome: it.ricevuta.nomeFile || 'quietanza.pdf', pdf: it.ricevuta.pdf,
+      data: it.ricevuta.dataPagamento || it.dataPagamento || '', importo: it.ricevuta.importo || it.importo,
+      avviso: it.ricevuta.avviso || it.codiceAvviso || ''
+    });
+    if (it.modulo && it.modulo.pdf) out.push({
+      it, tipo: 'Modulo di pagamento', nome: it.modulo.nomeFile || 'modulo.pdf', pdf: it.modulo.pdf,
+      data: it.scadenza || '', importo: it.importo, avviso: it.codiceAvviso || ''
+    });
+  });
+  return out.sort((a, b) => String(b.data).localeCompare(String(a.data)));
+}
+function scaricaBase64(b64, nome) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  scarica(new Blob([bytes], { type: 'application/pdf' }), nome);
+}
+function renderArchivio() {
+  archDocs = documentiArchivio();
+  const q = $('archCerca').value.trim().toLowerCase();
+  const visibili = archDocs.map((d, i) => ({ d, i })).filter(({ d }) =>
+    !q || [d.tipo, d.it.pianoNome, etichettaRata(d.it), d.it.banca, d.avviso, d.nome].join(' ').toLowerCase().includes(q));
+  const kb = Math.round(archDocs.reduce((s, d) => s + d.pdf.length * 0.75, 0) / 1024);
+  $('archInfo').textContent = `${archDocs.length} documenti archiviati · circa ${kb} KB · ${visibili.length} visibili`;
+  $('archLista').innerHTML = visibili.length
+    ? '<table><thead><tr><th>Data</th><th>Documento</th><th>Piano / rata</th><th>Importo</th><th>Banca</th><th>Codice avviso</th><th></th></tr></thead><tbody>' +
+      visibili.map(({ d, i }) => `<tr>
+        <td class="num">${formatData(d.data)}</td>
+        <td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td>
+        <td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td>
+        <td class="num">${formatEuro(d.importo)}</td>
+        <td>${esc(d.it.banca || '-')}</td>
+        <td class="num">${esc(d.avviso || '-')}</td>
+        <td><button class="ib" data-arch="${i}" title="Scarica PDF">⬇️</button></td>
+      </tr>`).join('') + '</tbody></table>'
+    : '<p class="hint">Nessun documento archiviato. Carica un modulo di pagamento o una quietanza.</p>';
+}
+$('archCerca').addEventListener('input', renderArchivio);
+$('archLista').addEventListener('click', e => {
+  const b = e.target.closest('[data-arch]');
+  if (!b) return;
+  const d = archDocs[Number(b.dataset.arch)];
+  if (d) scaricaBase64(d.pdf, d.nome);
+});
 
 // ---------- Nuova scadenza (bollo, assicurazione, multe…) ----------
 let catScelta = 'Bollo Auto';

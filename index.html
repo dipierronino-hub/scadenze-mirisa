@@ -263,7 +263,19 @@
       .kpi .v { font-size: 1.2rem; }
       .chart-box { height: 260px; }
     }
-  </style>
+      .sez-titolo { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 4px; }
+    .chips { gap: 8px; margin-bottom: 14px; }
+    .chip input { margin: 0 6px 0 0; vertical-align: middle; }
+    .chip:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+    .fonte { padding: 12px 0; }
+    .fonte + .fonte { border-top: 1px solid var(--border); }
+    .fonte-testa, .fonte-sotto { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .fonte-sotto { margin-top: 4px; }
+    .fonte-form { margin-top: 10px; gap: 8px; align-items: center; }
+    .fonte-form input { flex: 1; min-width: 160px; }
+    .tabella-scroll { overflow: auto; max-height: 460px; }
+</style>
 </head>
 <body>
 
@@ -351,9 +363,7 @@
 
       <div class="card" id="promemoria"></div>
 
-      <div class="card" id="pagheCollega" hidden></div>
-
-      <div class="card" id="assCollega" hidden></div>
+      <div class="card" id="collegamenti" hidden></div>
 
       <div class="card" id="sommaMensile" hidden></div>
 
@@ -981,16 +991,15 @@ function apriApp(user) {
   });
   appAperta = true;
   initAssegni();
-  if (aAutorizzato) attivaAssegni(); else aggiornaAssegniUI();
-  try { initPaghe(); attivaPaghe(); } catch (e) { setPMsg('Paghe non disponibili: ' + e.message); }
+  try { initPaghe(); } catch (e) { pMsg = 'Paghe non disponibili: ' + e.message; }
+  attivaAssegni(); attivaPaghe();
   resetIdle();
 }
 function chiudiApp() {
   if (dataRef) dataRef.off();
   if (connRef) connRef.off();
   dataRef = connRef = null;
-  appAperta = false; staccaAssegni(); aggiornaAssegniUI();
-  staccaPaghe(); aggiornaPagheUI();
+  appAperta = false; staccaAssegni(); staccaPaghe(); aggiornaCollegamenti();
   S.items = {}; S.piani = {}; S.sel.clear(); S.piano = 'TUTTI';
   clearTimeout(idleTimer);
   Object.keys(charts).forEach(k => { charts[k].destroy(); delete charts[k]; });
@@ -1143,7 +1152,7 @@ function euroPunto(v) {
   const [parteIntera, decimali] = Math.abs(n).toFixed(2).split('.');
   return (n < 0 ? '-' : '') + parteIntera.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali + ' €';
 }
-// ---------- Assegni: dati dell'app "Scadenziario Assegni" (progetto Firebase separato, sola lettura) ----------
+// ---------- Fonti esterne (sola lettura): assegni e paghe ----------
 const ASSEGNI_CONFIG = {
   apiKey: "AIzaSyBHUnbZ2eU1LuF8hqSHtaWxHQ3SHKngZWQ",
   authDomain: "assegni-mirisa.firebaseapp.com",
@@ -1151,94 +1160,6 @@ const ASSEGNI_CONFIG = {
   projectId: "assegni-mirisa",
   appId: "1:1040059014566:web:1cabf5b40c2f9c9608c367"
 };
-let aApp = null, aAuth = null, aDb = null, aRef = null, aItems = [], aAutorizzato = false, aMsg = '';
-let appAperta = false, assegniInclusi = true;
-
-function assMsg(t) { aMsg = t || ''; const el = $('assMsg'); if (el) el.textContent = aMsg; }
-function initAssegni() {
-  if (aApp) return;
-  aApp = firebase.initializeApp(ASSEGNI_CONFIG, 'assegni');
-  aAuth = aApp.auth();
-  aDb = aApp.database();
-  aAuth.onAuthStateChanged(async u => {
-    aAutorizzato = false;
-    if (!u) { staccaAssegni(); aggiornaAssegniUI(); renderSommaMensile(); return; }
-    try {
-      const snap = await aDb.ref('utenti/' + u.uid).get();
-      if (!snap.exists()) {
-        await aAuth.signOut();
-        aMsg = 'Questo account non è abilitato allo scadenzario assegni.';
-        aggiornaAssegniUI(); return;
-      }
-      aAutorizzato = true;
-    } catch (e) {
-      await aAuth.signOut();
-      aMsg = 'Accesso agli assegni non riuscito: ' + e.message;
-      aggiornaAssegniUI(); return;
-    }
-    aMsg = '';
-    if (appAperta) attivaAssegni(); else aggiornaAssegniUI();
-  });
-}
-function attivaAssegni() {
-  if (!aRef && aAutorizzato) {
-    aRef = aDb.ref('assegni');
-    aRef.on('value', s => {
-      aItems = Object.entries(s.val() || {}).map(([id, c]) => ({ id, ...c }));
-      renderSommaMensile();
-    }, err => assMsg('Lettura assegni negata: ' + err.message));
-  }
-  aggiornaAssegniUI();
-  renderSommaMensile();
-}
-function staccaAssegni() {
-  if (aRef) { aRef.off(); aRef = null; }
-  aItems = [];
-}
-function aggiornaAssegniUI() {
-  const box = $('assCollega');
-  const collegato = !!(aAuth && aAuth.currentUser && aAutorizzato);
-  box.hidden = !appAperta || collegato;
-  if (box.hidden) { box.innerHTML = ''; return; }
-  box.innerHTML = `
-    <div class="card-h"><h3>🧾 Assegni</h3><small>facoltativo</small></div>
-    <p class="hint" style="margin-top:0;">Collega lo scadenzario assegni per vedere anche gli importi degli assegni nel riepilogo mensile. Sola lettura.</p>
-    <form id="assLoginForm" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
-      <input type="email" id="assEmail" placeholder="Email" autocomplete="username" required style="flex:1;min-width:180px;">
-      <input type="password" id="assPwd" placeholder="Password" autocomplete="current-password" required style="flex:1;min-width:150px;">
-      <button class="btn btn-primary" type="submit">Collega</button>
-    </form>
-    <small id="assMsg" class="hint">${esc(aMsg)}</small>`;
-}
-$('assCollega').addEventListener('submit', async e => {
-  if (e.target.id !== 'assLoginForm') return;
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  btn.disabled = true; assMsg('Collegamento in corso…');
-  try {
-    await aAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    await aAuth.signInWithEmailAndPassword($('assEmail').value.trim(), $('assPwd').value);
-    $('assPwd').value = '';
-  } catch (err) { assMsg(erroreAuth(err)); }
-  finally { btn.disabled = false; }
-});
-
-// Assegni come voci del riepilogo: importo alla data di scadenza, pagato se già pagato
-function vociAssegni() {
-  return aItems
-    .filter(c => /^20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/.test(String(c.data || '')) && Number(c.importo) > 0)
-    .map(c => ({
-      scadenza: String(c.data), importo: (Number(c.importo) || 0) / 100, pagato: !!c.pagato, tipoVoce: 'assegno', // importi salvati in centesimi
-      numero: c.numero || '', banca: c.banca || '', beneficiario: c.beneficiario || ''
-    }));
-}
-function descrizioneVoce(it) {
-  if (it.tipoVoce === 'paga') return `💶 Paga ${esc(it.nome)} · competenza ${esc(meseLabel(it.competenza))} <small>(${esc(it.etichetta)})</small>`;
-  if (it.tipoVoce === 'assegno') return `🧾 Assegno n. ${esc(it.numero || '-')} · ${esc(it.beneficiario)} <small>(${esc(it.banca)})</small>`;
-  return `${esc(etichettaRata(it))} · ${esc(sottotitolo(it))}`;
-}
-
-// ---------- Paghe: dal cruscotto presenze (progetto Firebase presenze-mirisa), sola lettura ----------
 const PRESENZE_CONFIG = {
   apiKey: "AIzaSyDSB801ewz6pFZZeQ94qxOXwuxHn45R3Sg",
   authDomain: "presenze-mirisa.firebaseapp.com",
@@ -1246,67 +1167,154 @@ const PRESENZE_CONFIG = {
   projectId: "presenze-mirisa"
 };
 const MESI_PAGA = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
-const ISO_RE_PAGA = /^20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/;
-let pApp = null, pAuth = null, pDb = null, pRef = null, pContab = null, pDati = false, pMsgTxt = '', pagheInclusi = true;
+const ISO_RE = /^20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/;
 
-function setPMsg(t) { pMsgTxt = t || ''; const el = $('pMsg'); if (el) el.textContent = pMsgTxt; }
+let appAperta = false;
+let aApp = null, aAuth = null, aDb = null, aRef = null, aItems = [], aAutorizzato = false, aMsg = '';
+let pApp = null, pAuth = null, pDb = null, pRef = null, pContab = null, pDati = false, pMsg = '';
+let assegniInclusi = true, pagheInclusi = true;
+
+// ----- Assegni -----
+function initAssegni() {
+  if (aApp) return;
+  aApp = firebase.initializeApp(ASSEGNI_CONFIG, 'assegni');
+  aAuth = aApp.auth();
+  aDb = aApp.database();
+  aAuth.onAuthStateChanged(async u => {
+    aAutorizzato = false;
+    if (!u) { staccaAssegni(); aggiornaCollegamenti(); renderSommaMensile(); return; }
+    try {
+      const snap = await aDb.ref('utenti/' + u.uid).get();
+      if (!snap.exists()) {
+        await aAuth.signOut();
+        aMsg = 'Questo account non è abilitato allo scadenzario assegni.';
+        aggiornaCollegamenti(); return;
+      }
+      aAutorizzato = true;
+    } catch (e) {
+      await aAuth.signOut();
+      aMsg = 'Accesso agli assegni non riuscito: ' + e.message;
+      aggiornaCollegamenti(); return;
+    }
+    aMsg = '';
+    if (appAperta) attivaAssegni(); else aggiornaCollegamenti();
+  });
+}
+function attivaAssegni() {
+  if (aAutorizzato && !aRef) {
+    aRef = aDb.ref('assegni');
+    aRef.on('value', s => {
+      aItems = Object.entries(s.val() || {}).map(([id, c]) => ({ id, ...c }));
+      aggiornaCollegamenti(); renderSommaMensile();
+    }, err => { aMsg = 'Lettura assegni negata: ' + err.message; aggiornaCollegamenti(); });
+  }
+  aggiornaCollegamenti(); renderSommaMensile();
+}
+function staccaAssegni() {
+  if (aRef) { aRef.off(); aRef = null; }
+  aItems = [];
+}
+
+// ----- Paghe (cruscotto presenze, account admin) -----
 function initPaghe() {
   if (pApp) return;
   pApp = firebase.initializeApp(PRESENZE_CONFIG, 'presenze');
   pAuth = pApp.auth();
   pDb = pApp.database();
   pAuth.onAuthStateChanged(u => {
-    if (!u) { staccaPaghe(); aggiornaPagheUI(); renderSommaMensile(); return; }
-    if (appAperta) attivaPaghe(); else aggiornaPagheUI();
+    if (!u) { staccaPaghe(); aggiornaCollegamenti(); renderSommaMensile(); return; }
+    if (appAperta) attivaPaghe(); else aggiornaCollegamenti();
   });
 }
 function attivaPaghe() {
-  if (!pAuth || !pAuth.currentUser) { aggiornaPagheUI(); return; }
-  if (!pRef) {
+  if (pAuth && pAuth.currentUser && !pRef) {
     pRef = pDb.ref('contabilita');
     pRef.on('value', s => {
-      pContab = s.val() || {}; pDati = true; pMsgTxt = '';
-      aggiornaPagheUI(); renderSommaMensile();
+      pContab = s.val() || {}; pDati = true; pMsg = '';
+      aggiornaCollegamenti(); renderSommaMensile();
     }, () => {
       staccaPaghe();
-      pMsgTxt = "Accesso alle paghe negato: serve l'account admin del cruscotto presenze.";
+      pMsg = "Accesso alle paghe negato: serve l'account admin del cruscotto presenze.";
       pAuth.signOut();
-      aggiornaPagheUI();
+      aggiornaCollegamenti();
     });
   }
-  aggiornaPagheUI();
+  aggiornaCollegamenti(); renderSommaMensile();
 }
 function staccaPaghe() {
   if (pRef) { pRef.off(); pRef = null; }
   pContab = null; pDati = false;
 }
-function aggiornaPagheUI() {
-  const box = $('pagheCollega');
-  box.hidden = !appAperta || pDati;
-  if (box.hidden) { box.innerHTML = ''; return; }
-  box.innerHTML = `
-    <div class="card-h"><h3>💶 Paghe</h3><small>facoltativo</small></div>
-    <p class="hint" style="margin-top:0;">Collega il cruscotto presenze (account admin) per vedere le paghe nel riepilogo mensile: netto in busta, nel mese del bonifico. Sola lettura.</p>
-    <form id="pLoginForm" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
-      <input type="email" id="pEmail" placeholder="Email" autocomplete="username" required style="flex:1;min-width:180px;">
-      <input type="password" id="pPwd" placeholder="Password" autocomplete="current-password" required style="flex:1;min-width:150px;">
-      <button class="btn btn-primary" type="submit">Collega</button>
-    </form>
-    <small id="pMsg" class="hint">${esc(pMsgTxt)}</small>`;
+
+// ----- Collegamenti: una sola scheda, una riga per fonte -----
+function impostaMsg(fonte, t) {
+  if (fonte === 'a') aMsg = t || ''; else pMsg = t || '';
+  const el = $(fonte === 'a' ? 'aMsgTxt' : 'pMsgTxt');
+  if (el) el.textContent = fonte === 'a' ? aMsg : pMsg;
 }
-$('pagheCollega').addEventListener('submit', async e => {
-  if (e.target.id !== 'pLoginForm') return;
+function rigaFonte(f) {
+  const badge = f.on ? '<span class="badge b-pagato">Collegato</span>'
+    : f.verifica ? '<span class="badge">Verifica in corso…</span>'
+    : '<span class="badge">Non collegato</span>';
+  const corpo = f.on
+    ? `<div class="fonte-sotto"><small>${esc(f.dettaglio)} · sola lettura</small>
+         <button class="btn btn-ghost" type="button" data-azione="${f.id}-scollega">Scollega</button></div>`
+    : `<form id="${f.id}LoginForm" class="row fonte-form">
+         <input type="email" placeholder="Email" autocomplete="username" required>
+         <input type="password" placeholder="Password" autocomplete="current-password" required>
+         <button class="btn btn-primary" type="submit">Collega</button>
+       </form>
+       <small class="hint">${esc(f.suggerimento)}</small>`;
+  return `<div class="fonte">
+    <div class="fonte-testa"><b>${f.icona} ${f.nome}</b>${badge}</div>
+    ${corpo}
+    <small id="${f.id === 'a' ? 'aMsgTxt' : 'pMsgTxt'}" class="hint">${esc(f.msg)}</small>
+  </div>`;
+}
+function aggiornaCollegamenti() {
+  const box = $('collegamenti');
+  box.hidden = !appAperta;
+  if (!appAperta) { box.innerHTML = ''; return; }
+  const aOn = !!(aAutorizzato && aRef);
+  const aVerifica = !!(aAuth && aAuth.currentUser && !aAutorizzato);
+  const persone = pContab ? Object.values(pContab).reduce((n, p) => n + Object.keys(p || {}).length, 0) : 0;
+  box.innerHTML = `
+    <div class="card-h"><div><h3>Collegamenti</h3><small>Fonti di sola lettura per il riepilogo dei costi</small></div></div>
+    ${rigaFonte({ id: 'a', icona: '🧾', nome: 'Assegni', on: aOn, verifica: aVerifica,
+      dettaglio: `${aItems.length} assegni`, suggerimento: 'Usa email e password dell\'app assegni.', msg: aMsg })}
+    ${rigaFonte({ id: 'p', icona: '💶', nome: 'Paghe', on: pDati, verifica: false,
+      dettaglio: `${persone} registrazioni di paga`, suggerimento: 'Usa l\'account admin del cruscotto presenze.', msg: pMsg })}`;
+}
+$('collegamenti').addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  btn.disabled = true; setPMsg('Collegamento in corso…');
+  const form = e.target;
+  const fonte = form.id === 'aLoginForm' ? 'a' : form.id === 'pLoginForm' ? 'p' : null;
+  if (!fonte) return;
+  const auth = fonte === 'a' ? aAuth : pAuth;
+  const btn = form.querySelector('button[type=submit]');
+  btn.disabled = true; impostaMsg(fonte, 'Collegamento in corso…');
   try {
-    await pAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    await pAuth.signInWithEmailAndPassword($('pEmail').value.trim(), $('pPwd').value);
-    $('pPwd').value = '';
-  } catch (err) { setPMsg(erroreAuth(err)); }
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    await auth.signInWithEmailAndPassword(form.querySelector('input[type=email]').value.trim(), form.querySelector('input[type=password]').value);
+  } catch (err) { impostaMsg(fonte, erroreAuth(err)); }
   finally { btn.disabled = false; }
 });
+$('collegamenti').addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-azione]');
+  if (!b) return;
+  if (b.dataset.azione === 'a-scollega') aAuth.signOut();
+  if (b.dataset.azione === 'p-scollega') pAuth.signOut();
+});
 
+// ----- Voci dei due archivi, nello stesso formato del riepilogo -----
+function vociAssegni() {
+  return aItems
+    .filter(c => ISO_RE.test(String(c.data || '')) && Number(c.importo) > 0)
+    .map(c => ({
+      scadenza: String(c.data), importo: (Number(c.importo) || 0) / 100, pagato: !!c.pagato, tipoVoce: 'assegno', // centesimi
+      numero: c.numero || '', banca: c.banca || '', beneficiario: c.beneficiario || ''
+    }));
+}
 // "2026_Settembre" -> "2026-09"; null se non riconosciuto
 function competenzaIso(periodo) {
   const [anno, mese] = String(periodo).split('_');
@@ -1314,7 +1322,7 @@ function competenzaIso(periodo) {
   return (i >= 0 && /^20[0-9]{2}$/.test(anno || '')) ? `${anno}-${String(i + 1).padStart(2, '0')}` : null;
 }
 function meseSuccessivo(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-// Regole: acconto nel mese di competenza; bonifico nel mese della sua data; residuo non pagato stimato nel mese successivo
+// Acconto nel mese di competenza; bonifico nel mese della sua data; residuo non pagato stimato nel mese successivo
 function vociPaghe() {
   const out = [];
   Object.entries(pContab || {}).forEach(([periodo, persone]) => {
@@ -1323,182 +1331,140 @@ function vociPaghe() {
     Object.values(persone).forEach(c => {
       if (!c || typeof c !== 'object') return;
       const netto = Number(c.nettoPagare) || 0, acc = Number(c.acconto) || 0, bon = Number(c.bonifico) || 0;
-      const base = { tipoVoce: 'paga', nome: String(c.nome || '—'), competenza: comp, banca: String(c.banca || '') };
-      if (acc > 0) out.push({ ...base, scadenza: `${comp}-01`, importo: acc, pagato: true, etichetta: 'acconto, data non registrata' });
+      const base = { tipoVoce: 'paga', nome: String(c.nome || '—'), competenza: comp };
+      if (acc > 0) out.push({ ...base, scadenza: `${comp}-01`, importo: acc, pagato: true, etichetta: 'acconto' });
       if (bon > 0) {
-        const datata = ISO_RE_PAGA.test(String(c.dataBonifico || ''));
+        const datata = ISO_RE.test(String(c.dataBonifico || ''));
         out.push({ ...base, scadenza: datata ? String(c.dataBonifico) : `${meseSuccessivo(comp)}-01`, importo: bon, pagato: true, etichetta: datata ? 'bonifico' : 'bonifico, data non registrata' });
       }
       const residuo = Math.round((netto - acc - bon) * 100) / 100;
-      if (residuo > 0) out.push({ ...base, scadenza: `${meseSuccessivo(comp)}-01`, importo: residuo, pagato: false, etichetta: 'da pagare, stimato' });
+      if (residuo > 0) out.push({ ...base, scadenza: `${meseSuccessivo(comp)}-01`, importo: residuo, pagato: false, stimato: true, etichetta: 'residuo, stimato' });
     });
   });
   return out;
 }
 
+// ----- Riepilogo "Costi del mese" -----
+const ORDINE_TIPO = { scadenza: 0, assegno: 1, paga: 2 };
+function ordineVoci(a, b) {
+  return a.scadenza.localeCompare(b.scadenza) || ((ORDINE_TIPO[a.tipoVoce || 'scadenza'] || 0) - (ORDINE_TIPO[b.tipoVoce || 'scadenza'] || 0));
+}
+function etichettaTipo(v) {
+  return v.tipoVoce === 'assegno' ? '🧾 Assegno' : v.tipoVoce === 'paga' ? '💶 Paga' : '📅 Scadenza';
+}
+function testoVoce(v) {
+  if (v.tipoVoce === 'assegno') return `n. ${esc(v.numero || '-')} · ${esc(v.beneficiario)} <small class="muted">(${esc(v.banca)})</small>`;
+  if (v.tipoVoce === 'paga') return `${esc(v.nome)} · competenza ${esc(meseLabel(v.competenza))} <small class="muted">(${esc(v.etichetta)})</small>`;
+  return `${esc(etichettaRata(v))} · ${esc(sottotitolo(v))}`;
+}
+function statoVoce(v) {
+  if (v.pagato) return { txt: 'Pagato', cls: 'b-pagato' };
+  if (v.stimato) return { txt: 'Stimato', cls: 'b-dapagare' };
+  const g = giorniA(v.scadenza);
+  if (g < 0) return { txt: `Scaduto da ${Math.abs(g)} gg`, cls: 'b-scaduto' };
+  if (g === 0) return { txt: 'Scade oggi', cls: 'b-dapagare' };
+  return { txt: `Tra ${g} gg`, cls: 'b-dapagare' };
+}
+
 function renderSommaMensile() {
   const box = $('sommaMensile');
   box.hidden = false;
-  const inclAss = S.piano === 'TUTTI' && assegniInclusi && !!aRef;
-  const inclPaghe = S.piano === 'TUTTI' && pagheInclusi && pDati;
-  const pagheVoci = pDati ? vociPaghe() : [];
-  const arr = [...filtratePiano(), ...(inclAss ? vociAssegni() : []), ...(inclPaghe ? pagheVoci : [])];
-
-  const barra = aRef
-    ? `<div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-         <label><input type="checkbox" id="assIncl" ${assegniInclusi ? 'checked' : ''} ${S.piano === 'TUTTI' ? '' : 'disabled'}> 🧾 Includi assegni (${aItems.length})</label>
-         <button class="btn btn-ghost" id="btnAssScollega" type="button">Scollega assegni</button>
-       </div>`
-    : '';
-
-  const barraPaghe = pDati
-    ? `<div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-         <label><input type="checkbox" id="pIncl" ${pagheInclusi ? 'checked' : ''} ${S.piano === 'TUTTI' ? '' : 'disabled'}> 💶 Includi paghe (${pagheVoci.length} voci)</label>
-         <button class="btn btn-ghost" id="btnPagheScollega" type="button">Scollega paghe</button>
-       </div>`
-    : '';
-
-  // 1) avviso: scadenze del mese scelto (di default il mese successivo)
   if (!meseAvviso) meseAvviso = chiaveMese(0);
-  const mesiDaInizio = mesiTra(MESE_INIZIO_RIEPILOGO, chiaveMese(0)) + 13; // da agosto 2026 fino a 12 mesi oltre quello corrente
-  const opzioni = Array.from({ length: Math.max(mesiDaInizio, 1) }, (_, i) => aggiungiMesi(MESE_INIZIO_RIEPILOGO, i))
-    .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
-  const delMese = arr.filter(it => it.scadenza.slice(0, 7) === meseAvviso).sort(asc);
-  const daPagare = delMese.filter(i => !i.pagato);
-  const assMese = [...delMese].filter(i => i.tipoVoce === 'assegno');
-  const totAssMese = assMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
-  const pagheMese = [...delMese].filter(i => i.tipoVoce === 'paga');
-  const totPagheMese = pagheMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
-  const dettaglioPaghe = pagheMese.length
-    ? `<details open style="margin-top:12px;">
-         <summary><b>💶 Paghe del mese (${pagheMese.length}) · totale ${euroPunto(totPagheMese)}</b></summary>
-         <div style="overflow:auto;margin-top:6px;">
-           <table class="plain">
-             <thead><tr><th>Data</th><th>Collaboratore</th><th>Competenza</th><th>Voce</th><th class="r">Importo</th><th>Stato</th></tr></thead>
-             <tbody>${pagheMese.map(p => `<tr>
-               <td>${formatData(p.scadenza)}</td>
-               <td>${esc(p.nome)}</td>
-               <td>${esc(meseLabel(p.competenza))}</td>
-               <td>${esc(p.etichetta)}</td>
-               <td class="r num">${euroPunto(p.importo)}</td>
-               <td>${p.pagato ? '✓ pagato' : 'da pagare'}</td>
-             </tr>`).join('')}</tbody>
-           </table>
-         </div>
-       </details>`
-    : '';
-  const dettaglioAss = assMese.length
-    ? `<details open style="margin-top:12px;">
-         <summary><b>🧾 Assegni del mese (${assMese.length}) · totale ${euroPunto(totAssMese)}</b></summary>
-         <div style="overflow:auto;margin-top:6px;">
-           <table class="plain">
-             <thead><tr><th>Data</th><th>N.</th><th>Beneficiario</th><th>Banca</th><th class="r">Importo</th><th>Stato</th></tr></thead>
-             <tbody>${assMese.map(a => `<tr>
-               <td>${formatData(a.scadenza)}</td>
-               <td>${esc(a.numero)}</td>
-               <td>${esc(a.beneficiario)}</td>
-               <td>${esc(a.banca)}</td>
-               <td class="r num">${euroPunto(a.importo)}</td>
-               <td>${a.pagato ? '✓ pagato' : 'da pagare'}</td>
-             </tr>`).join('')}</tbody>
-           </table>
-         </div>
-       </details>`
-    : '';
-  const totMese = delMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
-  const totDaPagare = daPagare.reduce((s, i) => s + (Number(i.importo) || 0), 0);
-  const elenco = delMese.slice(0, 10).map(it => `<li>${formatData(it.scadenza)} · ${descrizioneVoce(it)} — <b class="num">${euroPunto(it.importo)}</b>${it.pagato ? ' ✓ pagata' : ''}</li>`).join('');
-  const avviso = delMese.length
-    ? `<div class="alert ${daPagare.length ? 'alert-amber' : 'alert-ok'}" style="display:block;">
-         <div class="row" style="justify-content:space-between;align-items:center;">
-           <b>🔔 Scadenze di ${esc(meseLabel(meseAvviso))}</b>
-           <select id="meseAvviso" style="width:auto;">${opzioni}</select>
-         </div>
-         <div style="margin:6px 0;">${delMese.length} ${delMese.length === 1 ? 'scadenza' : 'scadenze'} per <b class="num">${euroPunto(totMese)}</b>${daPagare.length ? ` · da pagare ${daPagare.length} per <b class="num">${euroPunto(totDaPagare)}</b>` : ' · tutte pagate'}</div>
-         <ul style="margin:0;padding-left:18px;">${elenco}</ul>
-         ${delMese.length > 10 ? `<small>…e altre ${delMese.length - 10}</small>` : ''}
-       </div>`
-    : `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
-         <b>🔔 ${esc(meseLabel(meseAvviso))}</b>
-         <select id="meseAvviso" style="width:auto;">${opzioni}</select>
-       </div>
-       <div class="alert alert-ok" style="margin:0;">✅ Nessuna scadenza in questo mese.</div>`;
 
-  // 2) totale per mese, con la quota degli assegni
-  const mesi = {};
-  arr.forEach(it => {
-    const k = it.scadenza.slice(0, 7), imp = Number(it.importo) || 0;
-    if (!mesi[k]) mesi[k] = { n: 0, tot: 0, pag: 0, dap: 0, ass: 0, pa: 0 };
-    mesi[k].n++; mesi[k].tot += imp;
-    if (it.pagato) mesi[k].pag += imp; else mesi[k].dap += imp;
-    if (it.tipoVoce === 'assegno') mesi[k].ass += imp;
-    if (it.tipoVoce === 'paga') mesi[k].pa += imp;
-  });
-  const etichetta = (S.piano === 'TUTTI' ? 'Tutte le scadenze' : S.piano === 'ADER' ? 'Cartelle AdER'
-    : S.piano === 'MUTUI' ? 'Mutui' : S.piano === 'VARIE' ? 'Altre scadenze' : nomeBreve(S.piani[S.piano].nome))
-    + (inclAss ? ' + assegni' : '') + (inclPaghe ? ' + paghe' : '');
-  const oggi = chiaveMese(0);
-  const th = 'position:sticky;top:0;z-index:2;background:var(--surface-2);';
-  const thB = 'position:sticky;bottom:0;z-index:2;background:var(--surface-2);';
-  let tN = 0, tT = 0, tP = 0, tD = 0, tA = 0, tPa = 0;
-  const chiavi = Object.keys(mesi).sort();
-  const righe = chiavi.map((k, i) => {
-    const m = mesi[k];
-    tN += m.n; tT += m.tot; tP += m.pag; tD += m.dap; tA += m.ass; tPa += m.pa;
-    return `<tr class="${i % 2 ? 'zebra' : ''}">
-      <td><b>${esc(meseLabel(k))}</b>${k === oggi ? ' <span class="badge b-dapagare">questo mese</span>' : ''}</td>
-      <td class="r num">${m.n}</td>
-      <td class="r num"><b>${euroPunto(m.tot)}</b></td>
-      <td class="r num">${m.ass ? euroPunto(m.ass) : '-'}</td>
-      <td class="r num">${m.pa ? euroPunto(m.pa) : '-'}</td>
-      <td class="r num">${euroPunto(m.pag)}</td>
-      <td class="r num">${euroPunto(m.dap)}</td>
+  const tutte = S.piano === 'TUTTI';
+  const inclAss = tutte && assegniInclusi && !!aRef;
+  const inclPaghe = tutte && pagheInclusi && pDati;
+  const pagheVoci = pDati ? vociPaghe() : [];
+  const voci = [...filtratePiano(), ...(inclAss ? vociAssegni() : []), ...(inclPaghe ? pagheVoci : [])];
+
+  const opzioni = Array.from({ length: Math.max(mesiTra(MESE_INIZIO_RIEPILOGO, chiaveMese(0)) + 13, 1) }, (_, i) => aggiungiMesi(MESE_INIZIO_RIEPILOGO, i))
+    .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
+
+  const somma = a => a.reduce((t, v) => t + (Number(v.importo) || 0), 0);
+  const delMese = voci.filter(v => v.scadenza.slice(0, 7) === meseAvviso).sort(ordineVoci);
+  const pagato = delMese.filter(v => v.pagato);
+  const daPagare = delMese.filter(v => !v.pagato);
+  const scadute = daPagare.filter(v => !v.stimato && giorniA(v.scadenza) < 0);
+
+  const chips = `<div class="row chips">
+      <label class="chip"><input type="checkbox" id="assIncl" ${assegniInclusi ? 'checked' : ''} ${tutte && aRef ? '' : 'disabled'}> 🧾 Assegni${aRef ? ` (${aItems.length})` : ''}</label>
+      <label class="chip"><input type="checkbox" id="pIncl" ${pagheInclusi ? 'checked' : ''} ${tutte && pDati ? '' : 'disabled'}> 💶 Paghe${pDati ? ` (${pagheVoci.length})` : ''}</label>
+      ${tutte ? '' : '<small class="hint">Assegni e paghe si vedono con "Tutte le scadenze" selezionato.</small>'}
+    </div>`;
+
+  const kpi = (colore, titolo, valore, sub) =>
+    `<div class="kpi" style="--k:${colore}"><div class="t">${titolo}</div><div class="v">${valore}</div><div class="s">${sub}</div></div>`;
+  const kpis = `<div class="kpi-grid">
+      ${kpi('var(--primary)', 'Totale del mese', euroPunto(somma(delMese)), `${delMese.length} voci`)}
+      ${kpi('var(--blue)', 'Già pagato', euroPunto(somma(pagato)), `${pagato.length} voci`)}
+      ${kpi('var(--amber)', 'Da pagare', euroPunto(somma(daPagare)), `${daPagare.length} voci`)}
+      ${kpi('var(--red)', 'Scadute', String(scadute.length), scadute.length ? `${euroPunto(somma(scadute))} da regolarizzare` : 'Nessuna')}
+    </div>`;
+
+  const righe = delMese.map(v => {
+    const st = statoVoce(v);
+    return `<tr>
+      <td>${formatData(v.scadenza)}</td>
+      <td>${etichettaTipo(v)}</td>
+      <td>${testoVoce(v)}</td>
+      <td class="r num"><b>${euroPunto(v.importo)}</b></td>
+      <td><span class="badge ${st.cls}">${st.txt}</span></td>
     </tr>`;
   }).join('');
-  const tabella = chiavi.length
-    ? `<div style="overflow:auto;max-height:420px;">
-        <table class="plain">
-          <thead><tr>
-            <th style="${th}">Mese</th>
-            <th class="r" style="${th}">Scadenze</th>
-            <th class="r" style="${th}">Totale</th>
-            <th class="r" style="${th}">di cui assegni</th>
-            <th class="r" style="${th}">di cui paghe</th>
-            <th class="r" style="${th}">Pagato</th>
-            <th class="r" style="${th}">Da pagare</th>
-          </tr></thead>
-          <tbody>${righe}</tbody>
-          <tfoot><tr>
-            <th style="${thB}">Totale</th>
-            <th class="r num" style="${thB}">${tN}</th>
-            <th class="r num" style="${thB}">${euroPunto(tT)}</th>
-            <th class="r num" style="${thB}">${tA ? euroPunto(tA) : '-'}</th>
-            <th class="r num" style="${thB}">${tPa ? euroPunto(tPa) : '-'}</th>
-            <th class="r num" style="${thB}">${euroPunto(tP)}</th>
-            <th class="r num" style="${thB}">${euroPunto(tD)}</th>
-          </tr></tfoot>
-        </table>
-      </div>`
-    : '<p class="hint">Nessuna scadenza da mostrare.</p>';
+  const elenco = delMese.length
+    ? `<div class="tabella-scroll"><table class="plain">
+         <thead><tr><th>Data</th><th>Tipo</th><th>Dettaglio</th><th class="r">Importo</th><th>Stato</th></tr></thead>
+         <tbody>${righe}</tbody>
+       </table></div>`
+    : '<p class="hint">Nessuna voce in questo mese.</p>';
+
+  const mesi = {};
+  voci.forEach(v => {
+    const k = v.scadenza.slice(0, 7), imp = Number(v.importo) || 0;
+    if (!mesi[k]) mesi[k] = { tot: 0, ass: 0, pa: 0, dap: 0 };
+    mesi[k].tot += imp;
+    if (!v.pagato) mesi[k].dap += imp;
+    if (v.tipoVoce === 'assegno') mesi[k].ass += imp;
+    if (v.tipoVoce === 'paga') mesi[k].pa += imp;
+  });
+  const chiavi = Object.keys(mesi).sort();
+  const oggi = chiaveMese(0);
+  const tot = { tot: 0, ass: 0, pa: 0, dap: 0 };
+  const righeMesi = chiavi.map(k => {
+    const m = mesi[k];
+    tot.tot += m.tot; tot.ass += m.ass; tot.pa += m.pa; tot.dap += m.dap;
+    return `<tr>
+      <td><b>${esc(meseLabel(k))}</b>${k === oggi ? ' <span class="badge">mese corrente</span>' : ''}</td>
+      <td class="r num"><b>${euroPunto(m.tot)}</b></td>
+      <td class="r num">${m.ass ? euroPunto(m.ass) : '–'}</td>
+      <td class="r num">${m.pa ? euroPunto(m.pa) : '–'}</td>
+      <td class="r num">${m.dap ? euroPunto(m.dap) : '–'}</td>
+    </tr>`;
+  }).join('');
+  const andamento = chiavi.length
+    ? `<div class="tabella-scroll"><table class="plain">
+         <thead><tr><th>Mese</th><th class="r">Totale</th><th class="r">Assegni</th><th class="r">Paghe</th><th class="r">Da pagare</th></tr></thead>
+         <tbody>${righeMesi}</tbody>
+         <tfoot><tr><th>Totale</th><th class="r num">${euroPunto(tot.tot)}</th><th class="r num">${euroPunto(tot.ass)}</th><th class="r num">${euroPunto(tot.pa)}</th><th class="r num">${euroPunto(tot.dap)}</th></tr></tfoot>
+       </table></div>`
+    : '<p class="hint">Nessuna voce da mostrare.</p>';
 
   box.innerHTML = `
-    ${barra}
-    ${barraPaghe}
-    ${avviso}
-    ${dettaglioAss}
-    ${dettaglioPaghe}
-    <div class="card-h" style="margin-top:14px;"><h3>Totale per mese</h3><small>${esc(etichetta)}</small></div>
-    ${tabella}`;
+    <div class="card-h">
+      <div><h3>Costi del mese</h3><small>Scadenze, assegni e paghe in un unico quadro</small></div>
+      <select id="meseAvviso" aria-label="Mese" style="width:auto;">${opzioni}</select>
+    </div>
+    ${chips}
+    ${kpis}
+    <div class="sez-titolo">Voci di ${esc(meseLabel(meseAvviso))}</div>
+    ${elenco}
+    <div class="sez-titolo">Andamento per mese</div>
+    ${andamento}`;
 }
-// Cambio del mese dell'avviso, inclusione assegni, scollegamento: gestiti una volta sola
 $('sommaMensile').addEventListener('change', e => {
   if (e.target.id === 'meseAvviso') { meseAvviso = e.target.value; renderSommaMensile(); }
   if (e.target.id === 'assIncl') { assegniInclusi = e.target.checked; renderSommaMensile(); }
   if (e.target.id === 'pIncl') { pagheInclusi = e.target.checked; renderSommaMensile(); }
-});
-$('sommaMensile').addEventListener('click', e => {
-  if (e.target.closest && e.target.closest('#btnAssScollega')) aAuth.signOut();
-  if (e.target.closest && e.target.closest('#btnPagheScollega')) pAuth.signOut();
 });
 
 function renderKpi() {

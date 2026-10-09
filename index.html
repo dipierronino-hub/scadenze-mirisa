@@ -1679,16 +1679,21 @@ $('importPdfFile').addEventListener('change', async e => {
 // ==============================================================
 // MUTUI: piano di ammortamento da PDF (rate, capitale, interessi, debito residuo)
 // ==============================================================
-// Dagli importi di una riga trova la coppia capitale + interessi che somma alla rata
-function scomponiRataMutuo(a) {
-  for (let k = 0; k < a.length; k++) {
-    for (let i = 0; i < a.length; i++) {
-      for (let j = i + 1; j < a.length; j++) {
-        if (i === k || j === k || a[k] <= 0) continue;
-        if (Math.abs(a[i] + a[j] - a[k]) > 0.02) continue;
-        const usati = new Set([i, j, k]);
+// Dagli importi di una riga (il trattino vale 0) trova la rata = quota capitale + quota interessi (+ eventuale mora/oneri)
+function scomponiRataMutuo(a, haResiduo) {
+  const n = a.length;
+  for (let k = 0; k < n; k++) {
+    if (a[k] <= 0) continue;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      if (i === k || j === k) continue;
+      for (let l = -1; l < n; l++) {
+        if (l === -1) { if (Math.abs(a[i] + a[j] - a[k]) > 0.02) continue; }
+        else if (l === i || l === j || l === k || Math.abs(a[i] + a[j] + a[l] - a[k]) > 0.02) continue;
+        const usati = new Set([i, j, k, l]);
         const altri = a.filter((_, x) => !usati.has(x));
-        return { rata: a[k], capitale: a[i], interessi: a[j], residuo: altri.length ? altri[altri.length - 1] : null };
+        const mora = Math.round((a[k] - a[i] - a[j]) * 100) / 100;
+        return { rata: a[k], capitale: a[i], interessi: a[j], mora: mora > 0 ? mora : 0,
+                 residuo: haResiduo && altri.length ? altri[altri.length - 1] : null };
       }
     }
   }
@@ -1700,15 +1705,18 @@ function dataMutuo(s) {
   return parseDataAdER(s);
 }
 function parseAmmortamentoMutuo(testo) {
-  const re = /(?:^|\s)(\d{1,3})\s+(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})((?:\s+€?\s*\d+(?:\.\d{3})*,\s?\d{2})+)/g;
+  const haResiduo = /debito\s*residuo/i.test(testo);
+  // Riga: N. [stato] data importi... (importi o "-"). Il numero 0 sono le rate di preammortamento: non si importano.
+  const re = /(?:^|\s)(\d{1,3})\s+(?:([A-Z])\s+)?(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})((?:\s+€?\s*(?:\d+(?:\.\d{3})*,\s?\d{2}|-))+)/g;
   const trovate = new Map();
   let m;
   while ((m = re.exec(testo)) !== null) {
     const n = parseInt(m[1], 10);
-    if (trovate.has(n)) continue;
-    const importi = m[3].match(/\d+(?:\.\d{3})*,\s?\d{2}/g).map(x => parseValore(x.replace(/\s/g, '')));
-    const riga = scomponiRataMutuo(importi);
-    if (riga) trovate.set(n, Object.assign({ n, scadenza: dataMutuo(m[2]) }, riga));
+    if (n === 0 || trovate.has(n)) continue;
+    const importi = (m[4].match(/\d+(?:\.\d{3})*,\s?\d{2}|-/g) || [])
+      .map(x => x === '-' ? 0 : parseValore(x.replace(/\s/g, '')));
+    const riga = scomponiRataMutuo(importi, haResiduo);
+    if (riga) trovate.set(n, Object.assign({ n, scadenza: dataMutuo(m[3]), pagata: m[2] === 'P' }, riga));
   }
   return [...trovate.values()].sort((a, b) => a.n - b.n);
 }
@@ -1759,14 +1767,15 @@ $('importMutuoFile').addEventListener('change', async e => {
       const it = normalizza({
         id: `${pianoId}_rata_${r.n}`, pianoId, pianoNome: nome, numeroRata: r.n, totaleRatePiano: rate.length,
         titolo: `${nome} - Rata ${r.n}`, categoria: CAT_MUTUO, importo: r.rata, quotaCapitale: r.capitale,
-        quotaMora: 0, quotaInteressi: r.interessi, quotaNotifica: 0, scadenza: r.scadenza,
-        debitoResiduo: r.residuo, note: r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''
+        quotaMora: r.mora, quotaInteressi: r.interessi, quotaNotifica: 0, scadenza: r.scadenza,
+        pagato: r.pagata, debitoResiduo: r.residuo,
+        note: [r.pagata ? 'Pagata secondo il piano' : '', r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''].filter(Boolean).join(' · ')
       });
       upd[it.id] = conMeta(it);
     });
     if (pdfB64) upd[`${pianoId}_rata_${rate[0].n}`].pianoPdf = { nomeFile: file.name, pdf: pdfB64 };
 
-    const msg = `✅ Importate ${rate.length} rate · capitale ${formatEuro(somma('capitale'))} · interessi ${formatEuro(somma('interessi'))}` +
+    const msg = `✅ Importate ${rate.length} rate (${rate.filter(r => r.pagata).length} già pagate) · capitale ${formatEuro(somma('capitale'))} · interessi ${formatEuro(somma('interessi'))}` +
       (mancanti.length ? ` · ⚠️ rate non lette: ${mancanti.join(', ')}` : '') +
       (pdfB64 ? '' : ' · PDF oltre 600 KB: non archiviato');
     if (await scrivi(upd, msg)) {

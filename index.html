@@ -1400,6 +1400,13 @@ function renderSommaMensile() {
       ${kpi('var(--amber)', 'Da pagare', euroPunto(somma(daPagare)), `${daPagare.length} voci`)}
       ${kpi('var(--red)', 'Scadute', String(scadute.length), scadute.length ? `${euroPunto(somma(scadute))} da regolarizzare` : 'Nessuna')}
     </div>`;
+  const daOrigine = t => delMese.filter(v => (v.tipoVoce || 'scadenza') === t);
+  const origini = `<div class="sez-titolo">Importi per origine</div>
+    <div class="kpi-grid">
+      ${kpi('var(--primary)', '📅 Scadenze', euroPunto(somma(daOrigine('scadenza'))), `${daOrigine('scadenza').length} voci`)}
+      ${kpi('var(--blue)', '🧾 Assegni', inclAss ? euroPunto(somma(daOrigine('assegno'))) : '–', inclAss ? `${daOrigine('assegno').length} voci` : 'non inclusi')}
+      ${kpi('var(--text)', '💶 Paghe', inclPaghe ? euroPunto(somma(daOrigine('paga'))) : '–', inclPaghe ? `${daOrigine('paga').length} voci` : 'non incluse')}
+    </div>`;
 
   const righe = delMese.map(v => {
     const st = statoVoce(v);
@@ -1421,21 +1428,23 @@ function renderSommaMensile() {
   const mesi = {};
   voci.forEach(v => {
     const k = v.scadenza.slice(0, 7), imp = Number(v.importo) || 0;
-    if (!mesi[k]) mesi[k] = { tot: 0, ass: 0, pa: 0, dap: 0 };
+    if (!mesi[k]) mesi[k] = { tot: 0, sca: 0, ass: 0, pa: 0, dap: 0 };
     mesi[k].tot += imp;
     if (!v.pagato) mesi[k].dap += imp;
+    if (!v.tipoVoce) mesi[k].sca += imp;
     if (v.tipoVoce === 'assegno') mesi[k].ass += imp;
     if (v.tipoVoce === 'paga') mesi[k].pa += imp;
   });
   const chiavi = Object.keys(mesi).sort();
   const oggi = chiaveMese(0);
-  const tot = { tot: 0, ass: 0, pa: 0, dap: 0 };
+  const tot = { tot: 0, sca: 0, ass: 0, pa: 0, dap: 0 };
   const righeMesi = chiavi.map(k => {
     const m = mesi[k];
-    tot.tot += m.tot; tot.ass += m.ass; tot.pa += m.pa; tot.dap += m.dap;
+    tot.tot += m.tot; tot.sca += m.sca; tot.ass += m.ass; tot.pa += m.pa; tot.dap += m.dap;
     return `<tr>
       <td><b>${esc(meseLabel(k))}</b>${k === oggi ? ' <span class="badge">mese corrente</span>' : ''}</td>
       <td class="r num"><b>${euroPunto(m.tot)}</b></td>
+      <td class="r num">${m.sca ? euroPunto(m.sca) : '–'}</td>
       <td class="r num">${m.ass ? euroPunto(m.ass) : '–'}</td>
       <td class="r num">${m.pa ? euroPunto(m.pa) : '–'}</td>
       <td class="r num">${m.dap ? euroPunto(m.dap) : '–'}</td>
@@ -1443,9 +1452,9 @@ function renderSommaMensile() {
   }).join('');
   const andamento = chiavi.length
     ? `<div class="tabella-scroll"><table class="plain">
-         <thead><tr><th>Mese</th><th class="r">Totale</th><th class="r">Assegni</th><th class="r">Paghe</th><th class="r">Da pagare</th></tr></thead>
+         <thead><tr><th>Mese</th><th class="r">Totale</th><th class="r">Scadenze</th><th class="r">Assegni</th><th class="r">Paghe</th><th class="r">Da pagare</th></tr></thead>
          <tbody>${righeMesi}</tbody>
-         <tfoot><tr><th>Totale</th><th class="r num">${euroPunto(tot.tot)}</th><th class="r num">${euroPunto(tot.ass)}</th><th class="r num">${euroPunto(tot.pa)}</th><th class="r num">${euroPunto(tot.dap)}</th></tr></tfoot>
+         <tfoot><tr><th>Totale</th><th class="r num">${euroPunto(tot.tot)}</th><th class="r num">${euroPunto(tot.sca)}</th><th class="r num">${euroPunto(tot.ass)}</th><th class="r num">${euroPunto(tot.pa)}</th><th class="r num">${euroPunto(tot.dap)}</th></tr></tfoot>
        </table></div>`
     : '<p class="hint">Nessuna voce da mostrare.</p>';
 
@@ -1456,6 +1465,7 @@ function renderSommaMensile() {
     </div>
     ${chips}
     ${kpis}
+    ${origini}
     <div class="sez-titolo">Voci di ${esc(meseLabel(meseAvviso))}</div>
     ${elenco}
     <div class="sez-titolo">Andamento per mese</div>

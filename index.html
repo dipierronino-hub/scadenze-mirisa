@@ -1127,7 +1127,7 @@ function renderSelettori() {
 }
 
 // ---------- Totale mensile e avviso del mese successivo (campanella) ----------
-let meseAvviso = null; // mese scelto dall'utente per l'avviso; se vuoto è il mese successivo
+let meseAvviso = null; // mese scelto dall'utente per l'avviso; se vuoto è il mese corrente
 const chiaveMese = offset => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + offset, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
 const meseLabel = k => { const s = dataLocale(k + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
 // Importi con il punto per le migliaia e la virgola per i centesimi, es. 1.234,56 €
@@ -1244,8 +1244,8 @@ function renderSommaMensile() {
     : '';
 
   // 1) avviso: scadenze del mese scelto (di default il mese successivo)
-  if (!meseAvviso) meseAvviso = chiaveMese(1);
-  const opzioni = Array.from({ length: 24 }, (_, i) => chiaveMese(i + 1))
+  if (!meseAvviso) meseAvviso = chiaveMese(0);
+  const opzioni = Array.from({ length: 24 }, (_, i) => chiaveMese(i))
     .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
   const delMese = arr.filter(it => it.scadenza.slice(0, 7) === meseAvviso).sort(asc);
   const daPagare = delMese.filter(i => !i.pagato);

@@ -1133,6 +1133,9 @@ function renderSelettori() {
 // ---------- Totale mensile e avviso del mese successivo (campanella) ----------
 let meseAvviso = null; // mese scelto dall'utente per l'avviso; se vuoto è il mese corrente
 const chiaveMese = offset => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + offset, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
+const MESE_INIZIO_RIEPILOGO = '2026-08'; // primo mese selezionabile nel riepilogo
+function aggiungiMesi(ym, n) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function mesiTra(da, a) { const [y1, m1] = da.split('-').map(Number), [y2, m2] = a.split('-').map(Number); return (y2 - y1) * 12 + (m2 - m1); }
 const meseLabel = k => { const s = dataLocale(k + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
 // Importi con il punto per le migliaia e la virgola per i centesimi, es. 1.234,56 €
 function euroPunto(v) {
@@ -1357,7 +1360,8 @@ function renderSommaMensile() {
 
   // 1) avviso: scadenze del mese scelto (di default il mese successivo)
   if (!meseAvviso) meseAvviso = chiaveMese(0);
-  const opzioni = Array.from({ length: 24 }, (_, i) => chiaveMese(i))
+  const mesiDaInizio = mesiTra(MESE_INIZIO_RIEPILOGO, chiaveMese(0)) + 13; // da agosto 2026 fino a 12 mesi oltre quello corrente
+  const opzioni = Array.from({ length: Math.max(mesiDaInizio, 1) }, (_, i) => aggiungiMesi(MESE_INIZIO_RIEPILOGO, i))
     .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
   const delMese = arr.filter(it => it.scadenza.slice(0, 7) === meseAvviso).sort(asc);
   const daPagare = delMese.filter(i => !i.pagato);

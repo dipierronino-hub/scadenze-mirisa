@@ -1694,16 +1694,21 @@ function scomponiRataMutuo(a) {
   }
   return null;
 }
+// Date: GG/MM/AAAA oppure GGMMAA (come nei piani della Banca Popolare Pugliese)
+function dataMutuo(s) {
+  if (/^\d{6}$/.test(s)) return `20${s.slice(4, 6)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
+  return parseDataAdER(s);
+}
 function parseAmmortamentoMutuo(testo) {
-  const re = /(?:^|\s)(\d{1,3})\s+(\d{2}[\/.]\d{2}[\/.]\d{4})((?:\s+€?\s*\d+(?:\.\d{3})*,\d{2})+)/g;
+  const re = /(?:^|\s)(\d{1,3})\s+(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})((?:\s+€?\s*\d+(?:\.\d{3})*,\s?\d{2})+)/g;
   const trovate = new Map();
   let m;
   while ((m = re.exec(testo)) !== null) {
     const n = parseInt(m[1], 10);
     if (trovate.has(n)) continue;
-    const importi = m[3].match(/\d+(?:\.\d{3})*,\d{2}/g).map(parseValore);
+    const importi = m[3].match(/\d+(?:\.\d{3})*,\s?\d{2}/g).map(x => parseValore(x.replace(/\s/g, '')));
     const riga = scomponiRataMutuo(importi);
-    if (riga) trovate.set(n, Object.assign({ n, scadenza: parseDataAdER(m[2]) }, riga));
+    if (riga) trovate.set(n, Object.assign({ n, scadenza: dataMutuo(m[2]) }, riga));
   }
   return [...trovate.values()].sort((a, b) => a.n - b.n);
 }
@@ -1726,8 +1731,10 @@ $('importMutuoFile').addEventListener('change', async e => {
   if (typeof pdfjsLib === 'undefined') { st.textContent = '❌ Libreria PDF non caricata. Ricarica la pagina.'; return; }
   st.textContent = '⏳ Lettura del piano di ammortamento in corso…';
   try {
-    const rate = parseAmmortamentoMutuo(await leggiTestoPdf(file));
-    if (!rate.length) { st.textContent = '❌ Nessuna rata riconosciuta. Serve il piano di ammortamento con le colonne rata, capitale e interessi.'; return; }
+    const testo = await leggiTestoPdf(file);
+    if (!testo.trim()) { st.textContent = '❌ Questo PDF è una scansione senza testo: l\'app non può leggerlo. Serve la versione digitale del piano (es. scaricata dall\'home banking).'; return; }
+    const rate = parseAmmortamentoMutuo(testo);
+    if (!rate.length) { st.textContent = '❌ Nessuna rata riconosciuta. Serve il piano di ammortamento con le colonne rata, scadenza, capitale e interessi.'; return; }
     const mancanti = [];
     for (let n = 1; n <= rate[rate.length - 1].n; n++) if (!rate.some(r => r.n === n)) mancanti.push(n);
 

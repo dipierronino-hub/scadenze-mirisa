@@ -1249,6 +1249,26 @@ function renderSommaMensile() {
     .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
   const delMese = arr.filter(it => it.scadenza.slice(0, 7) === meseAvviso).sort(asc);
   const daPagare = delMese.filter(i => !i.pagato);
+  const assMese = [...delMese].filter(i => i.tipoVoce === 'assegno');
+  const totAssMese = assMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
+  const dettaglioAss = assMese.length
+    ? `<details open style="margin-top:12px;">
+         <summary><b>🧾 Assegni del mese (${assMese.length}) · totale ${euroPunto(totAssMese)}</b></summary>
+         <div style="overflow:auto;margin-top:6px;">
+           <table class="plain">
+             <thead><tr><th>Data</th><th>N.</th><th>Beneficiario</th><th>Banca</th><th class="r">Importo</th><th>Stato</th></tr></thead>
+             <tbody>${assMese.map(a => `<tr>
+               <td>${formatData(a.scadenza)}</td>
+               <td>${esc(a.numero)}</td>
+               <td>${esc(a.beneficiario)}</td>
+               <td>${esc(a.banca)}</td>
+               <td class="r num">${euroPunto(a.importo)}</td>
+               <td>${a.pagato ? '✓ pagato' : 'da pagare'}</td>
+             </tr>`).join('')}</tbody>
+           </table>
+         </div>
+       </details>`
+    : '';
   const totMese = delMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
   const totDaPagare = daPagare.reduce((s, i) => s + (Number(i.importo) || 0), 0);
   const elenco = delMese.slice(0, 10).map(it => `<li>${formatData(it.scadenza)} · ${descrizioneVoce(it)} — <b class="num">${euroPunto(it.importo)}</b>${it.pagato ? ' ✓ pagata' : ''}</li>`).join('');
@@ -1324,6 +1344,7 @@ function renderSommaMensile() {
   box.innerHTML = `
     ${barra}
     ${avviso}
+    ${dettaglioAss}
     <div class="card-h" style="margin-top:14px;"><h3>Totale per mese</h3><small>${esc(etichetta)}</small></div>
     ${tabella}`;
 }

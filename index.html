@@ -347,6 +347,8 @@
 
       <div class="card" id="promemoria"></div>
 
+      <div class="card" id="sommaMensile" hidden></div>
+
       <div class="card">
         <div class="toolbar">
           <div class="search"><span>🔎</span><input id="cerca" type="search" placeholder="Cerca importo, data, targa, polizza, verbale, istanza…" autocomplete="off"></div>
@@ -1077,6 +1079,7 @@ function render() {
   aggiornaVerbaliScaduti();
   renderSelettori();
   renderKpi();
+  renderSommaMensile();
   renderPromemoria();
   renderLista();
   renderBulk();
@@ -1108,6 +1111,46 @@ function renderSelettori() {
     chiavi.map(k => `<option value="${esc(k)}">${S.piani[k].icona} ${esc(S.piani[k].nome)}</option>`).join('');
   if (S.piani[prec]) $('pianoMod').value = prec; else $('boxPianoMod').hidden = true;
   aggiornaBtnPdfPiano();
+}
+
+// Somma mensile delle scadenze del filtro scelto (tutte, cartelle AdER, mutui, altre, o una singola)
+function renderSommaMensile() {
+  const mesi = {};
+  filtratePiano().forEach(it => {
+    const k = it.scadenza.slice(0, 7), imp = Number(it.importo) || 0;
+    if (!mesi[k]) mesi[k] = { n: 0, tot: 0, pag: 0, dap: 0 };
+    mesi[k].n++; mesi[k].tot += imp;
+    if (it.pagato) mesi[k].pag += imp; else mesi[k].dap += imp;
+  });
+  const chiavi = Object.keys(mesi).sort();
+  const box = $('sommaMensile');
+  box.hidden = !chiavi.length;
+  if (!chiavi.length) { box.innerHTML = ''; return; }
+  const etichetta = S.piano === 'TUTTI' ? 'Tutte le scadenze' : S.piano === 'ADER' ? 'Cartelle AdER'
+    : S.piano === 'MUTUI' ? 'Mutui' : S.piano === 'VARIE' ? 'Altre scadenze' : nomeBreve(S.piani[S.piano].nome);
+  const oggi = oggiIso().slice(0, 7);
+  let tN = 0, tT = 0, tP = 0, tD = 0;
+  const righe = chiavi.map(k => {
+    const m = mesi[k];
+    tN += m.n; tT += m.tot; tP += m.pag; tD += m.dap;
+    const nome = dataLocale(k + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+    return `<tr class="${k === oggi ? 'pagata' : ''}">
+      <td><b>${esc(nome)}</b>${k === oggi ? ' <span class="badge b-dapagare">questo mese</span>' : ''}</td>
+      <td class="r num">${m.n}</td>
+      <td class="r num"><b>${formatEuro(m.tot)}</b></td>
+      <td class="r num">${formatEuro(m.pag)}</td>
+      <td class="r num">${formatEuro(m.dap)}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="card-h"><h3>Totale per mese</h3><small>${esc(etichetta)} · ${chiavi.length} mesi</small></div>
+    <div style="overflow:auto;max-height:420px;">
+      <table class="plain">
+        <thead><tr><th>Mese</th><th class="r">Scadenze</th><th class="r">Totale</th><th class="r">Pagato</th><th class="r">Da pagare</th></tr></thead>
+        <tbody>${righe}</tbody>
+        <tfoot><tr><th>Totale</th><th class="r num">${tN}</th><th class="r num">${formatEuro(tT)}</th><th class="r num">${formatEuro(tP)}</th><th class="r num">${formatEuro(tD)}</th></tr></tfoot>
+      </table>
+    </div>`;
 }
 
 function renderKpi() {

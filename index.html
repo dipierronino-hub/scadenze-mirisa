@@ -136,6 +136,9 @@
     .alert { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; flex-wrap: wrap; }
     .alert-red { background: var(--red-soft); color: var(--red); }
     .alert-ok { background: var(--green-soft); color: var(--green); }
+    .alert-amber { background: rgba(245, 158, 11, .14); color: #b45309; }
+    @media (prefers-color-scheme: dark) { .alert-amber { color: #fbbf24; } }
+    :root[data-theme="dark"] .alert-amber { color: #fbbf24; }
     .alert .btn { margin-left: auto; }
     .pr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
     .pr-head h3 { font-size: 1rem; }
@@ -168,6 +171,7 @@
     td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     tr:last-child td { border-bottom: 0; }
     tbody tr:hover td { background: var(--surface-2); }
+    tbody tr.zebra td { background: var(--surface-2); }
     tr.sel td { background: var(--primary-soft) !important; }
     tr.pagata td { color: var(--muted); }
     td.r, th.r { text-align: right; }
@@ -1113,45 +1117,98 @@ function renderSelettori() {
   aggiornaBtnPdfPiano();
 }
 
-// Somma mensile delle scadenze del filtro scelto (tutte, cartelle AdER, mutui, altre, o una singola)
+// ---------- Totale mensile e avviso del mese successivo (campanella) ----------
+let meseAvviso = null; // mese scelto dall'utente per l'avviso; se vuoto è il mese successivo
+const chiaveMese = offset => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + offset, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
+const meseLabel = k => { const s = dataLocale(k + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
+// Importi con il punto per le migliaia e la virgola per i centesimi, es. 1.234,56 €
+function euroPunto(v) {
+  const n = Math.round((Number(v) || 0) * 100) / 100;
+  const [parteIntera, decimali] = Math.abs(n).toFixed(2).split('.');
+  return (n < 0 ? '-' : '') + parteIntera.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali + ' €';
+}
 function renderSommaMensile() {
+  const arr = filtratePiano();
+  const box = $('sommaMensile');
+  box.hidden = !arr.length;
+  if (!arr.length) { box.innerHTML = ''; return; }
+
+  // 1) avviso: scadenze del mese scelto (di default il mese successivo)
+  if (!meseAvviso) meseAvviso = chiaveMese(1);
+  const opzioni = Array.from({ length: 24 }, (_, i) => chiaveMese(i + 1))
+    .map(k => `<option value="${k}" ${k === meseAvviso ? 'selected' : ''}>${esc(meseLabel(k))}</option>`).join('');
+  const delMese = arr.filter(it => it.scadenza.slice(0, 7) === meseAvviso).sort(asc);
+  const daPagare = delMese.filter(i => !i.pagato);
+  const totMese = delMese.reduce((s, i) => s + (Number(i.importo) || 0), 0);
+  const totDaPagare = daPagare.reduce((s, i) => s + (Number(i.importo) || 0), 0);
+  const elenco = delMese.slice(0, 10).map(it => `<li>${formatData(it.scadenza)} · ${esc(etichettaRata(it))} · ${esc(sottotitolo(it))} — <b class="num">${euroPunto(it.importo)}</b>${it.pagato ? ' ✓ pagata' : ''}</li>`).join('');
+  const avviso = delMese.length
+    ? `<div class="alert ${daPagare.length ? 'alert-amber' : 'alert-ok'}" style="display:block;">
+         <div class="row" style="justify-content:space-between;align-items:center;">
+           <b>🔔 Scadenze di ${esc(meseLabel(meseAvviso))}</b>
+           <select id="meseAvviso" style="width:auto;">${opzioni}</select>
+         </div>
+         <div style="margin:6px 0;">${delMese.length} ${delMese.length === 1 ? 'scadenza' : 'scadenze'} per <b class="num">${euroPunto(totMese)}</b>${daPagare.length ? ` · da pagare ${daPagare.length} per <b class="num">${euroPunto(totDaPagare)}</b>` : ' · tutte pagate'}</div>
+         <ul style="margin:0;padding-left:18px;">${elenco}</ul>
+         ${delMese.length > 10 ? `<small>…e altre ${delMese.length - 10}</small>` : ''}
+       </div>`
+    : `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+         <b>🔔 ${esc(meseLabel(meseAvviso))}</b>
+         <select id="meseAvviso" style="width:auto;">${opzioni}</select>
+       </div>
+       <div class="alert alert-ok" style="margin:0;">✅ Nessuna scadenza in questo mese.</div>`;
+
+  // 2) totale per mese
   const mesi = {};
-  filtratePiano().forEach(it => {
+  arr.forEach(it => {
     const k = it.scadenza.slice(0, 7), imp = Number(it.importo) || 0;
     if (!mesi[k]) mesi[k] = { n: 0, tot: 0, pag: 0, dap: 0 };
     mesi[k].n++; mesi[k].tot += imp;
     if (it.pagato) mesi[k].pag += imp; else mesi[k].dap += imp;
   });
-  const chiavi = Object.keys(mesi).sort();
-  const box = $('sommaMensile');
-  box.hidden = !chiavi.length;
-  if (!chiavi.length) { box.innerHTML = ''; return; }
   const etichetta = S.piano === 'TUTTI' ? 'Tutte le scadenze' : S.piano === 'ADER' ? 'Cartelle AdER'
     : S.piano === 'MUTUI' ? 'Mutui' : S.piano === 'VARIE' ? 'Altre scadenze' : nomeBreve(S.piani[S.piano].nome);
-  const oggi = oggiIso().slice(0, 7);
+  const oggi = chiaveMese(0);
   let tN = 0, tT = 0, tP = 0, tD = 0;
-  const righe = chiavi.map(k => {
+  const righe = Object.keys(mesi).sort().map((k, i) => {
     const m = mesi[k];
     tN += m.n; tT += m.tot; tP += m.pag; tD += m.dap;
-    const nome = dataLocale(k + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
-    return `<tr class="${k === oggi ? 'pagata' : ''}">
-      <td><b>${esc(nome)}</b>${k === oggi ? ' <span class="badge b-dapagare">questo mese</span>' : ''}</td>
+    return `<tr class="${i % 2 ? 'zebra' : ''}">
+      <td><b>${esc(meseLabel(k))}</b>${k === oggi ? ' <span class="badge b-dapagare">questo mese</span>' : ''}</td>
       <td class="r num">${m.n}</td>
-      <td class="r num"><b>${formatEuro(m.tot)}</b></td>
-      <td class="r num">${formatEuro(m.pag)}</td>
-      <td class="r num">${formatEuro(m.dap)}</td>
+      <td class="r num"><b>${euroPunto(m.tot)}</b></td>
+      <td class="r num">${euroPunto(m.pag)}</td>
+      <td class="r num">${euroPunto(m.dap)}</td>
     </tr>`;
   }).join('');
+
   box.innerHTML = `
-    <div class="card-h"><h3>Totale per mese</h3><small>${esc(etichetta)} · ${chiavi.length} mesi</small></div>
+    ${avviso}
+    <div class="card-h" style="margin-top:14px;"><h3>Totale per mese</h3><small>${esc(etichetta)}</small></div>
     <div style="overflow:auto;max-height:420px;">
       <table class="plain">
-        <thead><tr><th>Mese</th><th class="r">Scadenze</th><th class="r">Totale</th><th class="r">Pagato</th><th class="r">Da pagare</th></tr></thead>
+        <thead><tr>
+          <th style="position:sticky;top:0;z-index:2;background:var(--surface-2);">Mese</th>
+          <th class="r" style="position:sticky;top:0;z-index:2;background:var(--surface-2);">Scadenze</th>
+          <th class="r" style="position:sticky;top:0;z-index:2;background:var(--surface-2);">Totale</th>
+          <th class="r" style="position:sticky;top:0;z-index:2;background:var(--surface-2);">Pagato</th>
+          <th class="r" style="position:sticky;top:0;z-index:2;background:var(--surface-2);">Da pagare</th>
+        </tr></thead>
         <tbody>${righe}</tbody>
-        <tfoot><tr><th>Totale</th><th class="r num">${tN}</th><th class="r num">${formatEuro(tT)}</th><th class="r num">${formatEuro(tP)}</th><th class="r num">${formatEuro(tD)}</th></tr></tfoot>
+        <tfoot><tr>
+          <th style="position:sticky;bottom:0;z-index:2;background:var(--surface-2);">Totale</th>
+          <th class="r num" style="position:sticky;bottom:0;z-index:2;background:var(--surface-2);">${tN}</th>
+          <th class="r num" style="position:sticky;bottom:0;z-index:2;background:var(--surface-2);">${euroPunto(tT)}</th>
+          <th class="r num" style="position:sticky;bottom:0;z-index:2;background:var(--surface-2);">${euroPunto(tP)}</th>
+          <th class="r num" style="position:sticky;bottom:0;z-index:2;background:var(--surface-2);">${euroPunto(tD)}</th>
+        </tr></tfoot>
       </table>
     </div>`;
 }
+// Cambio del mese dell'avviso: si gestisce una volta sola, anche dopo ogni ridisegno
+$('sommaMensile').addEventListener('change', e => {
+  if (e.target.id === 'meseAvviso') { meseAvviso = e.target.value; renderSommaMensile(); }
+});
 
 function renderKpi() {
   let res = 0, pag = 0, nAp = 0, nPag = 0, nScad = 0, impScad = 0;

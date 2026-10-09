@@ -1221,7 +1221,7 @@ function vociAssegni() {
   return aItems
     .filter(c => /^20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/.test(String(c.data || '')) && Number(c.importo) > 0)
     .map(c => ({
-      scadenza: String(c.data), importo: Number(c.importo), pagato: !!c.pagato, tipoVoce: 'assegno',
+      scadenza: String(c.data), importo: (Number(c.importo) || 0) / 100, pagato: !!c.pagato, tipoVoce: 'assegno', // importi salvati in centesimi
       numero: c.numero || '', banca: c.banca || '', beneficiario: c.beneficiario || ''
     }));
 }

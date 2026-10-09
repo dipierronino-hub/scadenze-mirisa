@@ -275,6 +275,9 @@
     .fonte-form { margin-top: 10px; gap: 8px; align-items: center; }
     .fonte-form input { flex: 1; min-width: 160px; }
     .tabella-scroll { overflow: auto; max-height: 460px; }
+    .kpi-click { cursor: pointer; transition: transform .08s; }
+    .kpi-click:hover { transform: translateY(-1px); }
+    .kpi-click.attivo { outline: 2px solid var(--k); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -1346,6 +1349,8 @@ function vociPaghe() {
 
 // ----- Riepilogo "Costi del mese" -----
 const ORDINE_TIPO = { scadenza: 0, assegno: 1, paga: 2 };
+let filtroOrigine = null; // null = tutte le voci; altrimenti 'scadenza' | 'assegno' | 'paga'
+const ETICHETTA_ORIGINE = { scadenza: 'Scadenze', assegno: 'Assegni', paga: 'Paghe' };
 function ordineVoci(a, b) {
   return a.scadenza.localeCompare(b.scadenza) || ((ORDINE_TIPO[a.tipoVoce || 'scadenza'] || 0) - (ORDINE_TIPO[b.tipoVoce || 'scadenza'] || 0));
 }
@@ -1401,14 +1406,18 @@ function renderSommaMensile() {
       ${kpi('var(--red)', 'Scadute', String(scadute.length), scadute.length ? `${euroPunto(somma(scadute))} da regolarizzare` : 'Nessuna')}
     </div>`;
   const daOrigine = t => delMese.filter(v => (v.tipoVoce || 'scadenza') === t);
-  const origini = `<div class="sez-titolo">Importi per origine</div>
+  const kpiOrigine = (origine, colore, titolo, valore, sub) =>
+    `<div class="kpi kpi-click${filtroOrigine === origine ? ' attivo' : ''}" data-origine="${origine}" role="button" tabindex="0" style="--k:${colore}">
+       <div class="t">${titolo}</div><div class="v">${valore}</div><div class="s">${sub}</div></div>`;
+  const origini = `<div class="sez-titolo">Importi per origine · clicca per vedere le voci</div>
     <div class="kpi-grid">
-      ${kpi('var(--primary)', '📅 Scadenze', euroPunto(somma(daOrigine('scadenza'))), `${daOrigine('scadenza').length} voci`)}
-      ${kpi('var(--blue)', '🧾 Assegni', inclAss ? euroPunto(somma(daOrigine('assegno'))) : '–', inclAss ? `${daOrigine('assegno').length} voci` : 'non inclusi')}
-      ${kpi('var(--text)', '💶 Paghe', inclPaghe ? euroPunto(somma(daOrigine('paga'))) : '–', inclPaghe ? `${daOrigine('paga').length} voci` : 'non incluse')}
+      ${kpiOrigine('scadenza', 'var(--primary)', '📅 Scadenze', euroPunto(somma(daOrigine('scadenza'))), `${daOrigine('scadenza').length} voci`)}
+      ${kpiOrigine('assegno', 'var(--blue)', '🧾 Assegni', inclAss ? euroPunto(somma(daOrigine('assegno'))) : '–', inclAss ? `${daOrigine('assegno').length} voci` : 'non inclusi')}
+      ${kpiOrigine('paga', 'var(--text)', '💶 Paghe', inclPaghe ? euroPunto(somma(daOrigine('paga'))) : '–', inclPaghe ? `${daOrigine('paga').length} voci` : 'non incluse')}
     </div>`;
 
-  const righe = delMese.map(v => {
+  const visibili = filtroOrigine ? delMese.filter(v => (v.tipoVoce || 'scadenza') === filtroOrigine) : delMese;
+  const righe = visibili.map(v => {
     const st = statoVoce(v);
     return `<tr>
       <td>${formatData(v.scadenza)}</td>
@@ -1418,12 +1427,14 @@ function renderSommaMensile() {
       <td><span class="badge ${st.cls}">${st.txt}</span></td>
     </tr>`;
   }).join('');
-  const elenco = delMese.length
+  const elenco = visibili.length
     ? `<div class="tabella-scroll"><table class="plain">
          <thead><tr><th>Data</th><th>Tipo</th><th>Dettaglio</th><th class="r">Importo</th><th>Stato</th></tr></thead>
          <tbody>${righe}</tbody>
+         <tfoot><tr><th colspan="3">Totale elencato</th><th class="r num">${euroPunto(somma(visibili))}</th><th></th></tr></tfoot>
        </table></div>`
-    : '<p class="hint">Nessuna voce in questo mese.</p>';
+    : '<p class="hint">Nessuna voce in questo mese' + (filtroOrigine ? ' per ' + ETICHETTA_ORIGINE[filtroOrigine].toLowerCase() : '') + '.</p>';
+  const titoloVoci = `Voci di ${esc(meseLabel(meseAvviso))}` + (filtroOrigine ? ` · solo ${ETICHETTA_ORIGINE[filtroOrigine].toLowerCase()} <a href="#" data-tutte="1" style="margin-left:6px;">mostra tutte</a>` : '');
 
   const mesi = {};
   voci.forEach(v => {
@@ -1466,11 +1477,22 @@ function renderSommaMensile() {
     ${chips}
     ${kpis}
     ${origini}
-    <div class="sez-titolo">Voci di ${esc(meseLabel(meseAvviso))}</div>
+    <div class="sez-titolo">${titoloVoci}</div>
     ${elenco}
     <div class="sez-titolo">Andamento per mese</div>
     ${andamento}`;
 }
+$('sommaMensile').addEventListener('click', e => {
+  if (e.target.closest && e.target.closest('[data-tutte]')) { e.preventDefault(); filtroOrigine = null; renderSommaMensile(); return; }
+  const k = e.target.closest && e.target.closest('[data-origine]');
+  if (!k) return;
+  const o = k.dataset.origine;
+  filtroOrigine = filtroOrigine === o ? null : o;
+  renderSommaMensile();
+});
+$('sommaMensile').addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.origine) { e.preventDefault(); e.target.click(); }
+});
 $('sommaMensile').addEventListener('change', e => {
   if (e.target.id === 'meseAvviso') { meseAvviso = e.target.value; renderSommaMensile(); }
   if (e.target.id === 'assIncl') { assegniInclusi = e.target.checked; renderSommaMensile(); }

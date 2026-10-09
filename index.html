@@ -1829,7 +1829,9 @@ function parseAmmortamentoMutuo(testo, pagateFino = 0) {
     const importi = (m[5].match(/\d+(?:\.\d{3})*,\s?\d{2}|-/g) || [])
       .map(x => x === '-' ? 0 : parseValore(x.replace(/\s/g, '')));
     const riga = scomponiRataMutuo(importi, haResiduo);
-    const pagata = m[2] === 'P' || m[4] === 'P' || (n > 0 && pagateFino > 0 && n <= pagateFino);
+    // Una rata con scadenza futura non può essere pagata: ignora P o il conteggio manuale
+    const futura = scadenza > oggiIso();
+    const pagata = !futura && (m[2] === 'P' || m[4] === 'P' || (n > 0 && pagateFino > 0 && n <= pagateFino));
     if (riga) trovate.set(chiaveRiga, Object.assign({ n, scadenza, pagata }, riga));
   }
   return [...trovate.values()].sort((a, b) => a.scadenza.localeCompare(b.scadenza) || a.n - b.n);

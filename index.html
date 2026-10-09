@@ -513,6 +513,10 @@
 
         <div id="sub-mutuo" hidden>
           <p class="hint" style="margin-top:0;">Carica il PDF del piano di ammortamento del mutuo: l'app crea una rata per ogni scadenza (capitale, interessi, debito residuo) e archivia il PDF nell'Archivio. Il file viene letto solo sul tuo dispositivo.</p>
+          <div class="grid-form" style="margin-bottom:10px;">
+            <div><label class="f" for="mutuoPagateFino">Rate già pagate fino alla n. (facoltativo)</label>
+              <input type="number" id="mutuoPagateFino" min="0" max="999" step="1" placeholder="Es. 51"></div>
+          </div>
           <div class="row"><button class="btn btn-primary" id="btnMutuoPdf">📄 Carica PDF piano di ammortamento</button></div>
           <input type="file" id="importMutuoFile" accept=".pdf" hidden>
           <div id="statusMutuo" class="hint" style="font-weight:600;"></div>
@@ -1709,7 +1713,7 @@ function dataMutuo(s) {
   if (/^\d{6}$/.test(s)) return `20${s.slice(4, 6)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
   return parseDataAdER(s);
 }
-function parseAmmortamentoMutuo(testo) {
+function parseAmmortamentoMutuo(testo, pagateFino = 0) {
   const haResiduo = /debito\s*residuo/i.test(testo);
   // Riga: N. [stato] data importi... (importi o "-"). Il numero 0 sono le rate di preammortamento (solo interessi).
   const re = /(?:^|\s)(\d{1,3})\s+(?:([A-Z])\s+)?(\d{2}[\/.]\d{2}[\/.]\d{4}|\d{6})((?:\s+€?\s*(?:\d+(?:\.\d{3})*,\s?\d{2}|-))+)/g;
@@ -1721,7 +1725,8 @@ function parseAmmortamentoMutuo(testo) {
     const importi = (m[4].match(/\d+(?:\.\d{3})*,\s?\d{2}|-/g) || [])
       .map(x => x === '-' ? 0 : parseValore(x.replace(/\s/g, '')));
     const riga = scomponiRataMutuo(importi, haResiduo);
-    if (riga) trovate.set(chiaveRiga, Object.assign({ n, scadenza, pagata: m[2] === 'P' }, riga));
+    const pagata = m[2] === 'P' || (n > 0 && pagateFino > 0 && n <= pagateFino);
+    if (riga) trovate.set(chiaveRiga, Object.assign({ n, scadenza, pagata }, riga));
   }
   return [...trovate.values()].sort((a, b) => a.scadenza.localeCompare(b.scadenza) || a.n - b.n);
 }
@@ -1746,7 +1751,7 @@ $('importMutuoFile').addEventListener('change', async e => {
   try {
     const testo = await leggiTestoPdf(file);
     if (!testo.trim()) { st.textContent = '❌ Questo PDF è una scansione senza testo: l\'app non può leggerlo. Serve la versione digitale del piano (es. scaricata dall\'home banking).'; return; }
-    const rate = parseAmmortamentoMutuo(testo);
+    const rate = parseAmmortamentoMutuo(testo, Number($('mutuoPagateFino').value) || 0);
     if (!rate.length) { st.textContent = '❌ Nessuna rata riconosciuta. Serve il piano di ammortamento con le colonne rata, scadenza, capitale e interessi.'; return; }
     const totRate = rate.filter(r => r.n > 0).length, pre = rate.length - totRate;
     const maxN = Math.max(0, ...rate.map(r => r.n));

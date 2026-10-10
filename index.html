@@ -311,6 +311,7 @@
       </div>
       <nav class="nav" id="nav">
         <button data-view="scadenze" class="active"><span>📅</span>Scadenze</button>
+        <button data-view="quadro"><span>🧭</span>Quadro</button>
         <button data-view="riepiloghi"><span>📊</span>Riepiloghi</button>
         <button data-view="aggiungi"><span>➕</span>Aggiungi</button>
         <button data-view="archivio"><span>🗄️</span>Archivio</button>
@@ -332,8 +333,8 @@
       <button class="btn btn-primary" id="btnNuova">➕ Nuova scadenza</button>
     </div>
 
-    <!-- ======== SCADENZE ======== -->
-    <section id="view-scadenze">
+    <!-- ======== QUADRO GENERALE ======== -->
+    <section id="view-quadro" hidden>
       <div class="kpis">
         <div class="kpi" style="--k: var(--amber);">
           <div class="t">Residuo da pagare</div>
@@ -363,7 +364,10 @@
           <div class="bar"><span id="kBar" style="width:0%"></span></div>
         </div>
       </div>
+    </section>
 
+    <!-- ======== SCADENZE ======== -->
+    <section id="view-scadenze">
       <div class="card" id="promemoria"></div>
 
       <div class="card" id="collegamenti" hidden></div>
@@ -1756,10 +1760,10 @@ function renderRiepiloghi() {
 // ==============================================================
 function vai(v) {
   S.vista = v;
-  ['scadenze', 'riepiloghi', 'aggiungi', 'archivio', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
+  ['quadro', 'scadenze', 'riepiloghi', 'aggiungi', 'archivio', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
   if (v === 'archivio') renderArchivio();
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
-  $('contextBar').hidden = !(v === 'scadenze' || v === 'riepiloghi');
+  $('contextBar').hidden = !(v === 'scadenze' || v === 'riepiloghi' || v === 'quadro');
   $('bulkBar').style.visibility = v === 'scadenze' ? 'visible' : 'hidden';
   if (v === 'riepiloghi') renderRiepiloghi();
   if (v === 'aggiungi') renderCatGrid();

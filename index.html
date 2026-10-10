@@ -423,6 +423,7 @@
             <h3>Rate mese per mese</h3>
             <select id="periodoSel" style="width:auto;">
               <option value="12">Ultimi 3 mesi + prossimi 12</option>
+              <option value="2026">Da gennaio 2026</option>
               <option value="tutto">Intero periodo</option>
             </select>
           </div>
@@ -1721,6 +1722,12 @@ function renderRiepiloghi() {
   if (S.periodo === '12' || !arr.length) {
     start = new Date(oggi.getFullYear(), oggi.getMonth() - 3, 1);
     end = new Date(oggi.getFullYear(), oggi.getMonth() + 12, 1);
+  } else if (S.periodo === '2026') {
+    start = new Date(2026, 0, 1);
+    const ord = arr.slice().sort(asc);
+    const ultima = dataLocale(ord[ord.length - 1].scadenza);
+    const fine = new Date(oggi.getFullYear(), oggi.getMonth() + 12, 1);
+    end = ultima > fine ? ultima : fine; end.setDate(1);
   } else {
     const ord = arr.slice().sort(asc);
     start = dataLocale(ord[0].scadenza); start.setDate(1);

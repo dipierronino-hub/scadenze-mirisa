@@ -1726,7 +1726,7 @@ function renderRiepiloghi() {
     start = new Date(2026, 0, 1);
     const ord = arr.slice().sort(asc);
     const ultima = dataLocale(ord[ord.length - 1].scadenza);
-    const fine = new Date(oggi.getFullYear(), oggi.getMonth() + 12, 1);
+    const fine = new Date(2027, 11, 1); // 24 mesi: gennaio 2026 - dicembre 2027
     end = ultima > fine ? ultima : fine; end.setDate(1);
   } else {
     const ord = arr.slice().sort(asc);

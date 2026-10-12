@@ -37,3 +37,36 @@ test('anno bisestile', () => {
   assert.equal(R.normalizzaData('29/02/2024'), '2024-02-29');
   assert.equal(R.normalizzaData('29/02/2026'), null);
 });
+
+test('parseCsv ignora titolo, righe vuote e totale finale', () => {
+  const testo = require('fs').readFileSync('tests/fixtures/estratto-esempio.csv', 'utf8');
+  const { movimenti, errori } = R.parseCsv(testo, {
+    data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';'
+  });
+  assert.deepEqual(errori, []);
+  assert.ok(movimenti.every(m => m.importo < 0));
+  assert.equal(movimenti.find(m => m.descrizione.includes('ASSEGNO')).numeroAssegno, '000123');
+  assert.equal(movimenti.length, 4);
+  assert.equal(movimenti[0].importo, -1234.56);
+  assert.equal(movimenti[0].data, '2026-03-05');
+  assert.equal(movimenti[1].impronta, movimenti[2].impronta);
+});
+
+test('parseCsv rifiuta il file intero se una riga importo non è leggibile', () => {
+  const testo = 'Data;Importo;Descrizione\n05/03/2026;abc;X';
+  const { movimenti, errori } = R.parseCsv(testo, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';' });
+  assert.equal(movimenti.length, 0);
+  assert.equal(errori.length, 1);
+  assert.match(errori[0], /2/);
+});
+
+test('parseCsv usa ; se il separatore manca', () => {
+  const { movimenti } = R.parseCsv('Data;Importo;Descrizione\n05/03/2026;-10,00;X', { data: 'Data', importo: 'Importo', descrizione: 'Descrizione' });
+  assert.equal(movimenti.length, 1);
+});
+
+test('decodificaTesto decodifica windows-1252', () => {
+  const bytes = Uint8Array.from([0x70,0x65,0x72,0x63,0x68,0xE9,0x20,0x63,0x69,0x74,0x74,0xE0]);
+  assert.equal(R.decodificaTesto(bytes, 'windows-1252'), 'perché città');
+  assert.equal(R.decodificaTesto(new TextEncoder().encode('perché')), 'perché');
+});

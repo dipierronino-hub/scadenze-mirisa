@@ -63,7 +63,68 @@
     return cyrb53([mov.data, impStr, desc].join('|'));
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta };
+  // Divide una riga CSV rispettando i campi tra virgolette.
+  function dividiRiga(riga, sep) {
+    const out = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < riga.length; i++) {
+      const c = riga[i];
+      if (inQ) {
+        if (c === '"') {
+          if (riga[i + 1] === '"') { cur += '"'; i++; } else inQ = false;
+        } else cur += c;
+      } else if (c === '"') inQ = true;
+      else if (c === sep) { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  // Legge un estratto conto CSV. mappa = { data, importo, descrizione, separatore }
+  // (nomi di colonna dell'intestazione). Un solo errore di lettura scarta l'intero file.
+  function parseCsv(testo, mappa) {
+    const sep = (mappa && mappa.separatore) || ';';
+    const righe = String(testo == null ? '' : testo).replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
+    const nome = v => String(v == null ? '' : v).trim().toLowerCase();
+    const cercati = [mappa.data, mappa.importo, mappa.descrizione].map(nome);
+    let iHead = -1, idx = null;
+    for (let i = 0; i < Math.min(righe.length, 30); i++) {
+      const celle = dividiRiga(righe[i], sep).map(nome);
+      const pos = cercati.map(c => celle.indexOf(c));
+      if (pos.every(p => p !== -1)) { iHead = i; idx = pos; break; }
+    }
+    if (iHead === -1) {
+      return { movimenti: [], errori: ['Intestazione non trovata: controlla la mappatura delle colonne'] };
+    }
+    const movimenti = [], errori = [];
+    for (let i = iHead + 1; i < righe.length; i++) {
+      if (righe[i].trim() === '') continue;
+      const celle = dividiRiga(righe[i], sep);
+      const data = normalizzaData((celle[idx[0]] || '').trim());
+      if (!data) continue; // titoli, totali, righe senza data valida
+      const importo = normalizzaImporto(celle[idx[1]]);
+      if (Number.isNaN(importo)) {
+        errori.push('Riga ' + (i + 1) + ': importo non leggibile ("' + (celle[idx[1]] || '').trim() + '")');
+        continue;
+      }
+      if (importo >= 0) continue;
+      const descrizione = (celle[idx[2]] || '').trim();
+      const m = /ASS(?:EGNO)?\.?\s*(\d{4,})/i.exec(descrizione);
+      const mov = { data, importo, descrizione, numeroAssegno: m ? m[1] : null };
+      mov.impronta = impronta(mov);
+      movimenti.push(mov);
+    }
+    if (errori.length) return { movimenti: [], errori };
+    return { movimenti, errori };
+  }
+
+  // Decodifica byte in testo con la codifica indicata (es. 'windows-1252').
+  function decodificaTesto(bytes, codifica) {
+    return new TextDecoder(codifica || 'utf-8').decode(bytes);
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -262,7 +262,29 @@
     return { proposte, daDecidere, nonRiconciliati };
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
+  // Costruisce gli aggiornamenti per il database dalle conferme (funzione pura).
+  // Solo voci tipoVoce 'scadenza' (assegno e paga: fase 2). Voce mancante o gia pagata: saltata.
+  // banca: il Movimento non ha un campo banca in questa versione, quindi non viene
+  // impostata; la copia della voce conserva l'eventuale banca esistente.
+  // Il chiamante applica conMeta e db.ref(PATH).update(updates).
+  function costruisciAggiornamenti(conferme, voci) {
+    const updates = {}, saltate = [];
+    (conferme || []).forEach(c => {
+      const v = voci && voci[c.voceId];
+      if (!v) { saltate.push({ voceId: c.voceId, motivo: 'voce non trovata' }); return; }
+      if (v.pagato === true || updates[c.voceId]) { saltate.push({ voceId: c.voceId, motivo: 'voce gia pagata' }); return; }
+      if (v.tipoVoce !== 'scadenza') { saltate.push({ voceId: c.voceId, motivo: 'tipo non scrivibile in questa versione' }); return; }
+      const m = c.movimento;
+      updates[c.voceId] = Object.assign({}, v, {
+        pagato: true,
+        dataPagamento: m.data,
+        riconciliazione: { impronta: m.impronta, importo: m.importo, data: m.data },
+      });
+    });
+    return { updates, saltate };
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -273,3 +273,44 @@ test('movimenti con stessa impronta nello stesso input contano una volta', () =>
   assert.equal(r.proposte.length, 1);
   assert.equal(r.daDecidere.length + r.nonRiconciliati.length, 0);
 });
+
+test('costruisce aggiornamenti solo per voci ancora non pagate', () => {
+  const voci = {
+    a: { id: 'a', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', pianoNome: 'X' },
+    b: { id: 'b', scadenza: '2026-03-10', importo: 50, pagato: true, tipoVoce: 'scadenza' },
+  };
+  const conferme = [
+    { voceId: 'a', movimento: { data: '2026-03-11', importo: -100, descrizione: 'ARCOM', impronta: 'h1', numeroAssegno: null } },
+    { voceId: 'b', movimento: { data: '2026-03-11', importo: -50, descrizione: 'ARCOM', impronta: 'h2', numeroAssegno: null } },
+  ];
+  const { updates, saltate } = R.costruisciAggiornamenti(conferme, voci);
+  assert.equal(updates.a.pagato, true);
+  assert.equal(updates.a.dataPagamento, '2026-03-11');
+  assert.equal(updates.a.riconciliazione.impronta, 'h1');
+  assert.equal(updates.b, undefined);
+  assert.equal(saltate.length, 1);
+  assert.equal(voci.a.pagato, false);
+  assert.equal(updates.a.pianoNome, 'X');
+});
+
+test('mai scritture su voci di tipo assegno o paga', () => {
+  const voci = { c: { id: 'c', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'assegno' } };
+  const conferme = [{ voceId: 'c', movimento: { data: '2026-03-10', importo: -100, descrizione: 'X', impronta: 'h3', numeroAssegno: null } }];
+  const { updates, saltate } = R.costruisciAggiornamenti(conferme, voci);
+  assert.equal(updates.c, undefined);
+  assert.equal(saltate.length, 1);
+  assert.equal(saltate[0].motivo, 'tipo non scrivibile in questa versione');
+});
+
+test('voce mancante va in saltate e banca esistente resta intatta', () => {
+  const voci = { d: { id: 'd', importo: 10, pagato: false, tipoVoce: 'scadenza', banca: 'BCC' } };
+  const conferme = [
+    { voceId: 'zz', movimento: { data: '2026-03-10', importo: -10, impronta: 'h4' } },
+    { voceId: 'd', movimento: { data: '2026-03-10', importo: -10, impronta: 'h5' } },
+  ];
+  const { updates, saltate } = R.costruisciAggiornamenti(conferme, voci);
+  assert.equal(saltate.length, 1);
+  assert.equal(saltate[0].voceId, 'zz');
+  assert.equal(updates.d.banca, 'BCC');
+  assert.deepEqual(updates.d.riconciliazione, { impronta: 'h5', importo: -10, data: '2026-03-10' });
+});

@@ -1496,7 +1496,11 @@ function renderSommaMensile() {
   const prossime = daPagare
     .filter(v => !v.stimato && giorniA(v.scadenza) >= 0 && giorniA(v.scadenza) <= GIORNI_PROSSIMI)
     .sort(ordineVoci)
-    .map(v => ({ data: formatData(v.scadenza), descrizione: testoVoce(v), importo: v.importo }));
+    .map(v => {
+      const d = document.createElement('div'); // solo per togliere il markup da testoVoce (mai inserito nel DOM)
+      d.innerHTML = testoVoce(v);
+      return { data: formatData(v.scadenza), descrizione: d.textContent, importo: v.importo };
+    });
   const testoRiep = window.Riepilogo.testoRiepilogo({
     mese: meseLabel(meseAvviso),
     totale: somma(delMese), nTotale: delMese.length,

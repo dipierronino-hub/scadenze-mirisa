@@ -16,6 +16,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="riconciliazione.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
@@ -728,6 +730,15 @@
   </div>
 </div>
 
+<div class="modal" id="ricModal">
+  <div class="mbox">
+    <h3>🔗 Riconcilia movimenti</h3>
+    <div id="ricConferma"></div>
+    <div class="mfoot"><button class="btn btn-ghost" data-close="ricModal">Chiudi</button></div>
+  </div>
+</div>
+<input type="file" id="ricFile" accept=".csv,.xlsx,.pdf" hidden>
+
 <div id="toast"><span id="toastMsg"></span><button id="toastUndo">↩ Annulla</button></div>
 
 <script>
@@ -1402,7 +1413,8 @@ function renderSommaMensile() {
       <label class="chip"><input type="checkbox" id="assIncl" ${assegniInclusi ? 'checked' : ''} ${tutte && aRef ? '' : 'disabled'}> 🧾 Assegni${aRef ? ` (${aItems.length})` : ''}</label>
       <label class="chip"><input type="checkbox" id="pIncl" ${pagheInclusi ? 'checked' : ''} ${tutte && pDati ? '' : 'disabled'}> 💶 Paghe${pDati ? ` (${pagheVoci.length})` : ''}</label>
       ${tutte ? '' : '<small class="hint">Assegni e paghe si vedono con "Tutte le scadenze" selezionato.</small>'}
-    </div>`;
+    </div>
+    <div class="row"><button class="btn btn-ghost" id="btnRiconcilia" type="button">🔗 Riconcilia movimenti</button></div>`;
 
   const kpiStato = (stato, colore, titolo, valore, sub) =>
     `<div class="kpi kpi-click${stato !== 'tutte' && filtroStato === stato ? ' attivo' : ''}" data-stato="${stato}" role="button" tabindex="0" style="--k:${colore}">
@@ -1516,6 +1528,91 @@ $('sommaMensile').addEventListener('change', e => {
   if (e.target.id === 'meseAvviso') { meseAvviso = e.target.value; renderSommaMensile(); }
   if (e.target.id === 'assIncl') { assegniInclusi = e.target.checked; renderSommaMensile(); }
   if (e.target.id === 'pIncl') { pagheInclusi = e.target.checked; renderSommaMensile(); }
+});
+
+// ---------- Riconciliazione movimenti bancari (logica in riconciliazione.js) ----------
+const RIC_REGEX_PDF = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})$/;
+function ricVociAperte() {
+  // Vista delle scadenze correnti: id dalla chiave, tipoVoce 'scadenza' (assegni e paghe non si scrivono).
+  const o = {};
+  Object.keys(S.items).forEach(k => { o[k] = Object.assign({}, S.items[k], { id: k, tipoVoce: 'scadenza' }); });
+  return o;
+}
+async function ricLeggiMovimenti(file) {
+  const R = window.Riconciliazione;
+  const nome = file.name.toLowerCase();
+  if (nome.endsWith('.pdf')) {
+    const righe = R.righePdfDaTesto(await R.leggiPdf(file), { regexRiga: RIC_REGEX_PDF });
+    if (!righe.length) return { errori: ['Impossibile leggere il PDF: usa CSV o XLSX'], movimenti: [] };
+    const matrice = [['data', 'descrizione', 'importo']].concat(righe.map(r => {
+      const m = RIC_REGEX_PDF.exec(r.trim()); return [m[1], m[2], m[3]];
+    }));
+    return R.righeDaMatrice(matrice, { data: 'data', importo: 'importo', descrizione: 'descrizione' });
+  }
+  const banca = prompt('Nome della banca di questo estratto conto (es. BCC BARI E TARANTO):', BANCHE[0]);
+  if (!banca) return null;
+  let mappa = R.leggiMappatura(banca);
+  if (!mappa) {
+    const col = (et, d) => prompt('Nome esatto della colonna "' + et + '" nell\'intestazione del file:', d);
+    const data = col('data', 'Data'); if (!data) return null;
+    const importo = col('importo', 'Importo'); if (!importo) return null;
+    const descrizione = col('descrizione', 'Descrizione'); if (!descrizione) return null;
+    mappa = { data, importo, descrizione, separatore: ';' };
+    if (!nome.endsWith('.xlsx')) {
+      const sep = prompt('Separatore delle colonne del CSV (; oppure ,):', ';'); if (!sep) return null;
+      mappa.separatore = sep.trim().slice(0, 1) || ';';
+    }
+    if (!R.salvaMappatura(banca, mappa)) mostraToast('Mappatura valida solo per questa sessione');
+  }
+  const buf = await file.arrayBuffer();
+  if (nome.endsWith('.xlsx')) return R.righeDaMatrice(R.leggiXlsx(buf), mappa);
+  let testo = R.decodificaTesto(new Uint8Array(buf), 'utf-8');
+  if (testo.indexOf('\uFFFD') !== -1) testo = R.decodificaTesto(new Uint8Array(buf), 'windows-1252');
+  return R.parseCsv(testo, mappa);
+}
+// Salvataggio al conferma: legge S.items al momento (dati freschi), backup JSON, poi una sola update.
+async function ricSalva(conferme) {
+  const R = window.Riconciliazione;
+  const { updates, saltate } = R.costruisciAggiornamenti(conferme, ricVociAperte());
+  const ids = Object.keys(updates);
+  if (!ids.length) { alert('Nessuna voce aggiornata: ' + (saltate.length ? 'le voci sono gia pagate, non trovate o non scrivibili.' : 'nessuna conferma.')); return false; }
+  try {
+    scarica(new Blob([JSON.stringify(S.items, null, 2)], { type: 'application/json' }), 'backup-prima-riconciliazione-' + new Date().toISOString().slice(0, 10) + '.json');
+  } catch (e) { alert('⚠️ Backup non riuscito, nessuna scrittura eseguita: ' + e.message); return false; }
+  const undo = {}, scrivibili = {};
+  ids.forEach(id => {
+    const { tipoVoce, id: _id, ...resto } = updates[id]; // ripulisce i campi della vista
+    if (S.items[id].id !== undefined) resto.id = S.items[id].id;
+    undo[id] = S.items[id];
+    scrivibili[id] = conMeta(resto);
+  });
+  const ok = await scrivi(scrivibili, 'Riconciliate ' + ids.length + (ids.length === 1 ? ' voce' : ' voci'), undo);
+  if (ok && saltate.length) alert(saltate.length + ' voci non aggiornate (gia pagate altrove o non scrivibili).');
+  return ok;
+}
+async function apriRiconciliazione(file) {
+  try {
+    const esito = await ricLeggiMovimenti(file);
+    if (!esito) return;
+    if (esito.errori && esito.errori.length) { alert(esito.errori.slice(0, 5).join('\n')); return; }
+    if (!esito.movimenti.length) { alert('Nessun movimento in uscita trovato nel file.'); return; }
+    const R = window.Riconciliazione;
+    const vecchie = new Set(Object.values(S.items).map(it => it.riconciliazione && it.riconciliazione.impronta).filter(Boolean));
+    const voci = Object.values(ricVociAperte());
+    $('ricConferma').innerHTML = '';
+    apriModal('ricModal');
+    R.apriConferma($('ricConferma'), R.abbina(esito.movimenti, voci, vecchie), {
+      conferma: ricSalva,
+      chiudi: () => chiudiModal('ricModal')
+    });
+  } catch (e) { alert('Impossibile leggere il file: ' + e.message); }
+}
+$('sommaMensile').addEventListener('click', e => {
+  if (e.target.closest && e.target.closest('#btnRiconcilia')) $('ricFile').click();
+});
+$('ricFile').addEventListener('change', e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (f) apriRiconciliazione(f);
 });
 
 function renderKpi() {

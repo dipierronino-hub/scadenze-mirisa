@@ -1501,14 +1501,16 @@ function renderSommaMensile() {
       d.innerHTML = testoVoce(v);
       return { data: formatData(v.scadenza), descrizione: d.textContent, importo: v.importo };
     });
-  const testoRiep = window.Riepilogo.testoRiepilogo({
+  let testoRiep;
+  try { testoRiep = window.Riepilogo.testoRiepilogo({
     mese: meseLabel(meseAvviso),
     totale: somma(delMese), nTotale: delMese.length,
     pagato: somma(pagato), nPagato: pagato.length,
     daPagare: somma(daPagare), nDaPagare: daPagare.length,
     scadute: { n: scadute.length, importo: somma(scadute) },
     prossime, giorni: GIORNI_PROSSIMI,
-  }, euroPunto);
+  }, euroPunto); }
+  catch (err) { console.error('Riepilogo in testo:', err); testoRiep = 'Riepilogo non disponibile: ricarica la pagina.'; }
   const riepilogoTesto = `<div class="sez-titolo">Riepilogo in testo</div>
     <p class="riepilogo-testo" id="riepilogoTesto">${esc(testoRiep)}</p>
     <div class="row"><button class="btn btn-ghost" type="button" data-copia="1">📋 Copia riepilogo</button><small class="hint" id="riepilogoEsito"></small></div>`;

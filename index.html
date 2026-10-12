@@ -18,6 +18,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="riconciliazione.js"></script>
+  <script src="riepilogo.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
@@ -1490,6 +1491,24 @@ function renderSommaMensile() {
       <td class="r num">${m.dap ? euroPunto(m.dap) : '–'}</td>
     </tr>`;
   }).join('');
+  // Riepilogo in testo: stessi numeri del pannello, più le scadenze dei prossimi 7 giorni.
+  const GIORNI_PROSSIMI = 7;
+  const prossime = daPagare
+    .filter(v => !v.stimato && giorniA(v.scadenza) >= 0 && giorniA(v.scadenza) <= GIORNI_PROSSIMI)
+    .sort(ordineVoci)
+    .map(v => ({ data: formatData(v.scadenza), descrizione: testoVoce(v), importo: v.importo }));
+  const testoRiep = window.Riepilogo.testoRiepilogo({
+    mese: meseLabel(meseAvviso),
+    totale: somma(delMese), nTotale: delMese.length,
+    pagato: somma(pagato), nPagato: pagato.length,
+    daPagare: somma(daPagare), nDaPagare: daPagare.length,
+    scadute: { n: scadute.length, importo: somma(scadute) },
+    prossime, giorni: GIORNI_PROSSIMI,
+  }, euroPunto);
+  const riepilogoTesto = `<div class="sez-titolo">Riepilogo in testo</div>
+    <p class="riepilogo-testo" id="riepilogoTesto">${esc(testoRiep)}</p>
+    <div class="row"><button class="btn btn-ghost" type="button" data-copia="1">📋 Copia riepilogo</button><small class="hint" id="riepilogoEsito"></small></div>`;
+
   const andamento = chiavi.length
     ? `<div class="tabella-scroll"><table class="plain">
          <thead><tr><th>Mese</th><th class="r">Totale</th><th class="r">Scadenze</th><th class="r">Assegni</th><th class="r">Paghe</th><th class="r">Da pagare</th></tr></thead>
@@ -1506,12 +1525,28 @@ function renderSommaMensile() {
     ${chips}
     ${kpis}
     ${origini}
+    ${riepilogoTesto}
     <div class="sez-titolo">${titoloVoci}</div>
     ${elenco}
     <div class="sez-titolo">Andamento per mese</div>
     ${andamento}`;
 }
-$('sommaMensile').addEventListener('click', e => {
+$('sommaMensile').addEventListener('click', async e => {
+  const copia = e.target.closest && e.target.closest('[data-copia]');
+  if (copia) {
+    const testo = $('riepilogoTesto').textContent;
+    const esito = $('riepilogoEsito');
+    try {
+      await navigator.clipboard.writeText(testo);
+      esito.textContent = 'Copiato.';
+    } catch (err) {
+      const r = document.createRange();
+      r.selectNodeContents($('riepilogoTesto'));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      esito.textContent = 'Selezionato: premi Ctrl+C per copiare.';
+    }
+    return;
+  }
   if (e.target.closest && e.target.closest('[data-tutte]')) { e.preventDefault(); filtroOrigine = null; filtroStato = 'tutte'; renderSommaMensile(); return; }
   const st = e.target.closest && e.target.closest('[data-stato]');
   if (st) { const o = st.dataset.stato; filtroStato = filtroStato === o ? 'tutte' : o; renderSommaMensile(); return; }

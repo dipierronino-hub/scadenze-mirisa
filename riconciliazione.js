@@ -333,7 +333,7 @@
     return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function euro(n) { return Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function euro(n) { if (n == null || n === '' || isNaN(Number(n))) return '–'; return Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   function htmlMovimento(m) {
     return '<div class="ric-mov"><strong>' + escapeHtml(m.data) + '</strong> &middot; ' + escapeHtml(euro(m.importo)) +
@@ -351,43 +351,64 @@
     return t;
   }
 
+  // Un solo ascoltatore per contenitore: riaprire la schermata sostituisce il precedente senza toccare altri gestori.
+  const ascoltatori = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
   // risultato = esito di abbina; gestori = { conferma(conferme: Conferma[]), chiudi() }.
+  // conferma puo ritornare una Promise; un rifiuto, un'eccezione o `false` lasciano le righe confermabili.
   function apriConferma(contenitore, risultato, gestori) {
     const r = risultato || {};
     const g = gestori || {};
-    // Stato locale: proposte {scartata, spuntata}; daDecidere {scartato, scelta (indice candidata)}.
-    const proposte = (r.proposte || []).map(p => ({ p, scartata: false, spuntata: true }));
-    const dubbi = (r.daDecidere || []).map(d => ({ d, scartato: false, scelta: null }));
+    // Stato locale: proposte {scartata, spuntata, confermata}; daDecidere {scartato, scelta (indice candidata), confermato}.
+    const proposte = (r.proposte || []).map(p => ({ p, scartata: false, spuntata: true, confermata: false }));
+    const dubbi = (r.daDecidere || []).map(d => ({ d, candidate: d.candidate || [], scartato: false, scelta: null, confermato: false }));
     const non = r.nonRiconciliati || [];
+    let messaggio = '';
+
+    // voceId -> indice della riga daDecidere che l'ha scelta (per bloccarla nelle altre righe).
+    function vociScelte() {
+      const m = new Map();
+      dubbi.forEach((x, i) => {
+        if (!x.scartato && !x.confermato && x.scelta != null && x.candidate[x.scelta]) m.set(x.candidate[x.scelta].voce.id, i);
+      });
+      return m;
+    }
 
     function disegna() {
+      const scelte = vociScelte();
       let h = '<div class="ric-conferma">';
       h += '<h3>Proposte (' + proposte.filter(x => !x.scartata).length + ')</h3>';
       if (!proposte.length) h += '<p class="ric-vuoto">Nessuna proposta.</p>';
       proposte.forEach((x, i) => {
         const v = x.p.voce, scrivibile = v.tipoVoce === 'scadenza';
         h += '<div class="ric-riga' + (x.scartata ? ' ric-scartata' : '') + '">';
-        if (scrivibile && !x.scartata) h += '<input type="checkbox" data-az="spunta" data-i="' + i + '"' + (x.spuntata ? ' checked' : '') + '> ';
+        if (scrivibile && !x.scartata && !x.confermata) h += '<input type="checkbox" data-az="spunta" data-i="' + i + '"' + (x.spuntata ? ' checked' : '') + '> ';
         h += htmlMovimento(x.p.movimento) + '<div>' + htmlVoce(v) + '</div>' +
           '<div class="ric-motivi">Punteggio ' + escapeHtml(x.p.totale) + ': ' + escapeHtml((x.p.motivi || []).join(', ')) + '</div>';
-        if (x.scartata) h += '<em>Scartata</em>';
+        if (x.confermata) h += '<em>Confermata</em>';
+        else if (x.scartata) h += '<em>Scartata</em>';
         else {
           if (scrivibile) h += '<button type="button" data-az="conferma-una" data-i="' + i + '">Conferma</button> ';
           h += '<button type="button" data-az="scarta-p" data-i="' + i + '">Scarta</button>';
         }
         h += '</div>';
       });
-      h += '<h3>Da decidere (' + dubbi.filter(x => !x.scartato).length + ')</h3>';
+      h += '<h3>Da decidere (' + dubbi.filter(x => !x.scartato && !x.confermato).length + ')</h3>';
       if (!dubbi.length) h += '<p class="ric-vuoto">Nessun movimento da decidere.</p>';
       dubbi.forEach((x, i) => {
         h += '<div class="ric-riga' + (x.scartato ? ' ric-scartata' : '') + '">' + htmlMovimento(x.d.movimento);
-        if (x.scartato) h += '<em>Scartato</em>';
+        if (x.confermato) h += '<em>Confermato</em>';
+        else if (x.scartato) h += '<em>Scartato</em>';
         else {
-          x.d.candidate.forEach((c, j) => {
+          x.candidate.forEach((c, j) => {
             const scrivibile = c.voce.tipoVoce === 'scadenza';
+            const altrove = scelte.has(c.voce.id) && scelte.get(c.voce.id) !== i;
             h += '<div class="ric-cand' + (x.scelta === j ? ' ric-scelta' : '') + '">' + htmlVoce(c.voce) +
               ' <span class="ric-motivi">(' + escapeHtml(c.totale) + ': ' + escapeHtml((c.motivi || []).join(', ')) + ')</span> ';
-            if (scrivibile) h += '<button type="button" data-az="scegli" data-i="' + i + '" data-j="' + j + '">' + (x.scelta === j ? 'Scelta' : 'Scegli') + '</button>';
+            if (scrivibile) {
+              h += '<button type="button" data-az="scegli" data-i="' + i + '" data-j="' + j + '"' + (altrove ? ' disabled' : '') + '>' + (x.scelta === j ? 'Scelta' : 'Scegli') + '</button>';
+              if (altrove) h += ' <em class="ric-nota">voce già scelta per un altro movimento</em>';
+            }
             h += '</div>';
           });
           h += '<button type="button" data-az="scarta-d" data-i="' + i + '">Scarta</button>';
@@ -397,43 +418,81 @@
       h += '<h3>Non riconciliati (' + non.length + ')</h3>';
       if (!non.length) h += '<p class="ric-vuoto">Nessuno.</p>';
       non.forEach(m => { h += '<div class="ric-riga">' + htmlMovimento(m) + '</div>'; });
+      if (messaggio) h += '<p class="ric-msg" role="status">' + escapeHtml(messaggio) + '</p>';
       h += '<div class="ric-azioni"><button type="button" data-az="conferma-sel">Conferma selezionate</button> ' +
         '<button type="button" data-az="chiudi">Chiudi</button></div></div>';
       contenitore.innerHTML = h;
     }
 
-    // Conferme scelte: proposte spuntate e non scartate, piu le scelte da decidere. Solo 'scadenza', una per voce.
+    // Conferme scelte: proposte spuntate, non scartate e non ancora confermate, piu le scelte da decidere.
+    // Solo 'scadenza'. Una voce scelta due volte non viene inviata: il problema e riportato in `errore`.
+    // Ogni elemento porta con se la riga di origine (`righe`) per marcarla confermata dopo il successo.
     function raccogli(soloProposta) {
-      const conferme = [], viste = new Set();
-      function aggiungi(voce, movimento) {
-        if (!voce || voce.tipoVoce !== 'scadenza' || viste.has(voce.id)) return;
+      const conferme = [], righe = [], viste = new Set();
+      let errore = '';
+      function aggiungi(voce, movimento, riga) {
+        if (!voce || voce.tipoVoce !== 'scadenza') return;
+        if (viste.has(voce.id)) { errore = 'La voce ' + (voce.beneficiario || voce.id) + ' è scelta per più di un movimento.'; return; }
         viste.add(voce.id);
         conferme.push({ voceId: voce.id, movimento });
+        righe.push(riga);
       }
       if (soloProposta != null) {
         const x = proposte[soloProposta];
-        if (x && !x.scartata) aggiungi(x.p.voce, x.p.movimento);
-        return conferme;
+        if (x && !x.scartata && !x.confermata) aggiungi(x.p.voce, x.p.movimento, x);
+      } else {
+        proposte.forEach(x => { if (!x.scartata && !x.confermata && x.spuntata) aggiungi(x.p.voce, x.p.movimento, x); });
+        dubbi.forEach(x => {
+          if (!x.scartato && !x.confermato && x.scelta != null && x.candidate[x.scelta]) aggiungi(x.candidate[x.scelta].voce, x.d.movimento, x);
+        });
       }
-      proposte.forEach(x => { if (!x.scartata && x.spuntata) aggiungi(x.p.voce, x.p.movimento); });
-      dubbi.forEach(x => { if (!x.scartato && x.scelta != null) aggiungi(x.d.candidate[x.scelta].voce, x.d.movimento); });
-      return conferme;
+      return { conferme, righe, errore };
     }
 
-    contenitore.onclick = function (ev) {
+    function invia(soloProposta) {
+      const s = raccogli(soloProposta);
+      if (s.errore) { messaggio = s.errore + ' Correggi la scelta.'; disegna(); return; }
+      if (!s.conferme.length) { messaggio = 'Nessuna voce selezionata da confermare.'; disegna(); return; }
+      if (!g.conferma) return;
+      messaggio = '';
+      function riuscita() {
+        s.righe.forEach(x => { if ('confermata' in x) x.confermata = true; else x.confermato = true; });
+        disegna();
+      }
+      function fallita(e) { messaggio = 'Conferma non riuscita' + (e && e.message ? ': ' + e.message : '.'); disegna(); }
+      let esito;
+      try { esito = g.conferma(s.conferme); } catch (e) { fallita(e); return; }
+      if (esito && typeof esito.then === 'function') esito.then(v => { if (v === false) fallita(); else riuscita(); }, fallita);
+      else if (esito === false) fallita();
+      else riuscita();
+    }
+
+    function suClick(ev) {
       const el = ev.target && ev.target.closest ? ev.target.closest('[data-az]') : null;
-      if (!el) return;
+      if (!el || el.disabled) return;
       const az = el.getAttribute('data-az');
       const i = Number(el.getAttribute('data-i')), j = Number(el.getAttribute('data-j'));
       if (az === 'spunta') { proposte[i].spuntata = !!el.checked; return; }
       if (az === 'scarta-p') proposte[i].scartata = true;
       else if (az === 'scarta-d') dubbi[i].scartato = true;
-      else if (az === 'scegli') dubbi[i].scelta = dubbi[i].scelta === j ? null : j;
-      else if (az === 'conferma-una') { if (g.conferma) g.conferma(raccogli(i)); return; }
-      else if (az === 'conferma-sel') { if (g.conferma) g.conferma(raccogli()); return; }
+      else if (az === 'scegli') {
+        const id = dubbi[i].candidate[j].voce.id, altrove = vociScelte().get(id);
+        if (altrove !== undefined && altrove !== i) return;
+        dubbi[i].scelta = dubbi[i].scelta === j ? null : j;
+      }
+      else if (az === 'conferma-una') { invia(i); return; }
+      else if (az === 'conferma-sel') { invia(); return; }
       else if (az === 'chiudi') { if (g.chiudi) g.chiudi(); return; }
+      messaggio = '';
       disegna();
-    };
+    }
+
+    if (ascoltatori) {
+      const prec = ascoltatori.get(contenitore);
+      if (prec) contenitore.removeEventListener('click', prec);
+      ascoltatori.set(contenitore, suClick);
+    }
+    contenitore.addEventListener('click', suClick);
     disegna();
   }
 

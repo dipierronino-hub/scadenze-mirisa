@@ -1,6 +1,11 @@
 (function (root) {
   'use strict';
 
+  // Soglie e finestra dell'abbinamento (spec sezione 5): un unico punto da modificare.
+  const SOGLIA_PROPOSTA = 60;
+  const SOGLIA_DUBBIO = 40;
+  const FINESTRA = { prima: 7, dopo: 30 }; // giorni rispetto alla scadenza
+
   // Importo in formato italiano ('1.234,56') o semplice ('1234.56'). NaN se illeggibile.
   function normalizzaImporto(v) {
     if (typeof v === 'number') return v;
@@ -179,7 +184,35 @@
     return righe.filter(r => r);
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf };
+  function giorni(isoData) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoData));
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : NaN;
+  }
+
+  function normTesto(v) {
+    return String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  // Punteggio di un movimento rispetto a una voce. null se importo o finestra non combaciano.
+  function punteggio(mov, voce) {
+    if (Math.round(Math.abs(mov.importo) * 100) !== Math.round(Math.abs(voce.importo) * 100)) return null;
+    const diff = giorni(mov.data) - giorni(voce.scadenza);
+    if (!(diff >= -FINESTRA.prima && diff <= FINESTRA.dopo)) return null;
+    let totale = 30;
+    const motivi = ['importo esatto'];
+    const desc = normTesto(mov.descrizione);
+    const num = normTesto(voce.numero);
+    if (num && (normTesto(mov.numeroAssegno) === num || desc.indexOf(num) !== -1)) {
+      totale += 40; motivi.push('numero assegno citato');
+    }
+    if (Math.abs(diff) <= 3) { totale += 20; motivi.push('data entro 3 giorni'); }
+    else { totale += 10; motivi.push('data entro 30 giorni'); }
+    const nomi = [voce.beneficiario, voce.banca].map(normTesto).filter(n => n);
+    if (nomi.some(n => desc.indexOf(n) !== -1)) { totale += 10; motivi.push('nome riconosciuto'); }
+    return { totale, motivi };
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

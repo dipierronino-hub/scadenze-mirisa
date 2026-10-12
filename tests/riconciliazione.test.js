@@ -118,3 +118,49 @@ test('leggiXlsx e leggiPdf senza librerie lanciano errore chiaro', async () => {
   assert.throws(() => R.leggiXlsx(new ArrayBuffer(0)), /libreria non caricata/);
   await assert.rejects(() => R.leggiPdf({}), /libreria non caricata/);
 });
+
+const voce = { id: 'v1', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' };
+
+test('importo esatto, data vicina e nome riconosciuto: proposta', () => {
+  const mov = { data: '2026-03-11', importo: -100, descrizione: 'BONIFICO A FAVORE ARCOM SRL', numeroAssegno: null };
+  const { totale, motivi } = R.punteggio(mov, voce);
+  assert.equal(totale, 20 + 30 + 10);
+  assert.ok(motivi.length >= 2);
+});
+
+test('numero assegno citato pesa 40', () => {
+  const v = { ...voce, tipoVoce: 'assegno', numero: '000123', scadenza: '2026-03-10' };
+  const mov = { data: '2026-03-10', importo: -100, descrizione: 'ASSEGNO 000123', numeroAssegno: '000123' };
+  assert.equal(R.punteggio(mov, v).totale, 40 + 30 + 20);
+});
+
+test('importo diverso: nessuna candidata', () => {
+  const mov = { data: '2026-03-10', importo: -99.99, descrizione: 'ARCOM', numeroAssegno: null };
+  assert.equal(R.punteggio(mov, voce), null);
+});
+
+test('data fuori finestra: nessuna candidata', () => {
+  const mov = { data: '2026-02-01', importo: -100, descrizione: 'ARCOM', numeroAssegno: null };
+  assert.equal(R.punteggio(mov, voce), null);
+});
+
+test('finestra: da scadenza-7 a scadenza+30, estremi inclusi', () => {
+  const m = d => ({ data: d, importo: -100, descrizione: 'X', numeroAssegno: null });
+  assert.equal(R.punteggio(m('2026-03-03'), voce).totale, 30 + 10);
+  assert.equal(R.punteggio(m('2026-03-02'), voce), null);
+  assert.equal(R.punteggio(m('2026-04-09'), voce).totale, 30 + 10);
+  assert.equal(R.punteggio(m('2026-04-10'), voce), null);
+});
+
+test('senza beneficiario ne banca il nome non conta e non e nei motivi', () => {
+  const v = { ...voce, beneficiario: '' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null }, v);
+  assert.equal(r.totale, 30 + 20);
+  assert.equal(r.motivi.length, 2);
+});
+
+test('nome confrontato in forma normalizzata; segno ignorato', () => {
+  const v = { ...voce, beneficiario: 'Arcom S.r.l.' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'Pagamento ARCOM SRL fatt.1', numeroAssegno: null }, v);
+  assert.equal(r.totale, 30 + 20 + 10);
+});

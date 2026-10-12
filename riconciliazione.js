@@ -364,6 +364,7 @@
     const dubbi = (r.daDecidere || []).map(d => ({ d, candidate: d.candidate || [], scartato: false, scelta: null, confermato: false }));
     const non = r.nonRiconciliati || [];
     let messaggio = '';
+    let inCorso = false; // conferma in volo: ignora altri click finche non termina
 
     // voceId -> indice della riga daDecidere che l'ha scelta (per bloccarla nelle altre righe).
     function vociScelte() {
@@ -388,7 +389,7 @@
         if (x.confermata) h += '<em>Confermata</em>';
         else if (x.scartata) h += '<em>Scartata</em>';
         else {
-          if (scrivibile) h += '<button type="button" data-az="conferma-una" data-i="' + i + '">Conferma</button> ';
+          if (scrivibile) h += '<button type="button" data-az="conferma-una" data-i="' + i + '"' + (inCorso ? ' disabled' : '') + '>Conferma</button> ';
           h += '<button type="button" data-az="scarta-p" data-i="' + i + '">Scarta</button>';
         }
         h += '</div>';
@@ -419,7 +420,7 @@
       if (!non.length) h += '<p class="ric-vuoto">Nessuno.</p>';
       non.forEach(m => { h += '<div class="ric-riga">' + htmlMovimento(m) + '</div>'; });
       if (messaggio) h += '<p class="ric-msg" role="status">' + escapeHtml(messaggio) + '</p>';
-      h += '<div class="ric-azioni"><button type="button" data-az="conferma-sel">Conferma selezionate</button> ' +
+      h += '<div class="ric-azioni"><button type="button" data-az="conferma-sel"' + (inCorso ? ' disabled' : '') + '>Conferma selezionate</button> ' +
         '<button type="button" data-az="chiudi">Chiudi</button></div></div>';
       contenitore.innerHTML = h;
     }
@@ -450,21 +451,25 @@
     }
 
     function invia(soloProposta) {
+      if (inCorso) return;
       const s = raccogli(soloProposta);
       if (s.errore) { messaggio = s.errore + ' Correggi la scelta.'; disegna(); return; }
       if (!s.conferme.length) { messaggio = 'Nessuna voce selezionata da confermare.'; disegna(); return; }
       if (!g.conferma) return;
       messaggio = '';
       function riuscita() {
+        inCorso = false;
         s.righe.forEach(x => { if ('confermata' in x) x.confermata = true; else x.confermato = true; });
         disegna();
       }
-      function fallita(e) { messaggio = 'Conferma non riuscita' + (e && e.message ? ': ' + e.message : '.'); disegna(); }
+      function fallita(e) { inCorso = false; messaggio = 'Conferma non riuscita' + (e && e.message ? ': ' + e.message : '.'); disegna(); }
+      inCorso = true;
       let esito;
       try { esito = g.conferma(s.conferme); } catch (e) { fallita(e); return; }
       if (esito && typeof esito.then === 'function') esito.then(v => { if (v === false) fallita(); else riuscita(); }, fallita);
       else if (esito === false) fallita();
       else riuscita();
+      if (inCorso) disegna(); // Promise in attesa: mostra i pulsanti disabilitati
     }
 
     function suClick(ev) {

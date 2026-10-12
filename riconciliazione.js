@@ -284,7 +284,47 @@
     return { updates, saltate };
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
+  // Memoria della mappatura colonne per banca. Chiave 'riconciliazione.mappa.<banca>', valore JSON.
+  // Se l'archivio rifiuta la scrittura, la mappatura resta solo per la sessione (mappatureSessione).
+  const mappatureSessione = new Map();
+  const PREFISSO_MAPPA = 'riconciliazione.mappa.';
+  function archivioDi(archivio) {
+    if (archivio) return archivio;
+    try { return (typeof globalThis !== 'undefined' && globalThis.localStorage) || null; } catch (e) { return null; }
+  }
+
+  function salvaMappatura(banca, mappa, archivio) {
+    if (typeof banca !== 'string' || !mappa || typeof mappa !== 'object') return false;
+    const chiave = PREFISSO_MAPPA + banca;
+    const arch = archivioDi(archivio);
+    if (!arch) return false;
+    try {
+      arch.setItem(chiave, JSON.stringify(mappa));
+      mappatureSessione.delete(chiave);
+      return true;
+    } catch (e) {
+      try { mappatureSessione.set(chiave, JSON.parse(JSON.stringify(mappa))); } catch (e2) { /* ignora */ }
+      return false;
+    }
+  }
+
+  function leggiMappatura(banca, archivio) {
+    if (typeof banca !== 'string') return null;
+    const chiave = PREFISSO_MAPPA + banca;
+    const arch = archivioDi(archivio);
+    if (arch) {
+      try {
+        const raw = arch.getItem(chiave);
+        if (raw) {
+          const m = JSON.parse(raw);
+          if (m && typeof m === 'object') return m;
+        }
+      } catch (e) { /* passa al fallback di sessione */ }
+    }
+    return mappatureSessione.has(chiave) ? mappatureSessione.get(chiave) : null;
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, salvaMappatura, leggiMappatura, mappatureSessione, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -314,3 +314,52 @@ test('voce mancante va in saltate e banca esistente resta intatta', () => {
   assert.equal(updates.d.banca, 'BCC');
   assert.deepEqual(updates.d.riconciliazione, { impronta: 'h5', importo: -10, data: '2026-03-10' });
 });
+
+test('mappatura salvata e riletta per banca', () => {
+  const mem = new Map();
+  const archivio = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  const mappa = { data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';' };
+  assert.equal(R.salvaMappatura('BCC', mappa, archivio), true);
+  assert.deepEqual(R.leggiMappatura('BCC', archivio), mappa);
+  assert.ok(mem.has('riconciliazione.mappa.BCC'));
+  assert.deepEqual(JSON.parse(mem.get('riconciliazione.mappa.BCC')), mappa);
+});
+
+test('archivio non disponibile: nessun errore', () => {
+  const archivioRotto = { getItem() { throw new Error('negato'); }, setItem() { throw new Error('negato'); } };
+  assert.equal(R.salvaMappatura('BCC', {}, archivioRotto), false);
+  assert.equal(R.leggiMappatura('ALTRA', archivioRotto), null);
+  R.mappatureSessione.clear();
+});
+
+test('parametri non validi: false e null', () => {
+  const mem = new Map();
+  const archivio = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  assert.equal(R.salvaMappatura(42, {}, archivio), false);
+  assert.equal(R.salvaMappatura('BCC', null, archivio), false);
+  assert.equal(R.salvaMappatura('BCC', 'x', archivio), false);
+  assert.equal(R.leggiMappatura(42, archivio), null);
+  assert.equal(R.leggiMappatura('MAI', archivio), null);
+  assert.equal(mem.size, 0);
+});
+
+test('nessun archivio disponibile: false e null senza eccezioni', () => {
+  assert.equal(typeof globalThis.localStorage, 'undefined');
+  assert.equal(R.salvaMappatura('BCC', { data: 'D' }), false);
+  assert.equal(R.leggiMappatura('BCC'), null);
+});
+
+test('archivio che rifiuta setItem: la mappatura resta per la sessione', () => {
+  R.mappatureSessione.clear();
+  const archivio = { getItem: () => null, setItem() { throw new Error('quota'); } };
+  const mappa = { data: 'D', importo: 'I' };
+  assert.equal(R.salvaMappatura('BPER', mappa, archivio), false);
+  assert.deepEqual(R.leggiMappatura('BPER', archivio), mappa);
+  assert.equal(R.leggiMappatura('BCC', archivio), null);
+  R.mappatureSessione.clear();
+});
+
+test('archivio con JSON corrotto: null', () => {
+  const archivio = { getItem: () => '{non json', setItem() {} };
+  assert.equal(R.leggiMappatura('BCC', archivio), null);
+});

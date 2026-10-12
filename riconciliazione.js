@@ -84,7 +84,8 @@
   // Legge un estratto conto CSV. mappa = { data, importo, descrizione, separatore }
   // (nomi di colonna dell'intestazione). Un solo errore di lettura scarta l'intero file.
   function parseCsv(testo, mappa) {
-    const sep = (mappa && mappa.separatore) || ';';
+    if (!mappa) return { movimenti: [], errori: ['mappa mancante'] };
+    const sep = mappa.separatore || ';';
     const righe = String(testo == null ? '' : testo).replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
     const nome = v => String(v == null ? '' : v).trim().toLowerCase();
     const cercati = [mappa.data, mappa.importo, mappa.descrizione].map(nome);
@@ -101,8 +102,14 @@
     for (let i = iHead + 1; i < righe.length; i++) {
       if (righe[i].trim() === '') continue;
       const celle = dividiRiga(righe[i], sep);
-      const data = normalizzaData((celle[idx[0]] || '').trim());
-      if (!data) continue; // titoli, totali, righe senza data valida
+      const cellaData = (celle[idx[0]] || '').trim();
+      if (cellaData === '') continue; // riga senza data
+      if (/^\s*(totale|saldo)/i.test(celle[0] || '')) continue; // riga di totale
+      const data = normalizzaData(cellaData);
+      if (!data) {
+        errori.push('Riga ' + (i + 1) + ': data non valida ("' + cellaData + '")');
+        continue;
+      }
       const importo = normalizzaImporto(celle[idx[1]]);
       if (Number.isNaN(importo)) {
         errori.push('Riga ' + (i + 1) + ': importo non leggibile ("' + (celle[idx[1]] || '').trim() + '")');

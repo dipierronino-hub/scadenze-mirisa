@@ -57,7 +57,7 @@ test('parseCsv rifiuta il file intero se una riga importo non è leggibile', () 
   const { movimenti, errori } = R.parseCsv(testo, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';' });
   assert.equal(movimenti.length, 0);
   assert.equal(errori.length, 1);
-  assert.match(errori[0], /2/);
+  assert.match(errori[0], /Riga 2/);
 });
 
 test('parseCsv usa ; se il separatore manca', () => {
@@ -69,4 +69,23 @@ test('decodificaTesto decodifica windows-1252', () => {
   const bytes = Uint8Array.from([0x70,0x65,0x72,0x63,0x68,0xE9,0x20,0x63,0x69,0x74,0x74,0xE0]);
   assert.equal(R.decodificaTesto(bytes, 'windows-1252'), 'perché città');
   assert.equal(R.decodificaTesto(new TextEncoder().encode('perché')), 'perché');
+});
+
+test('parseCsv rifiuta il file se una data non è valida', () => {
+  const testo = 'Data;Importo;Descrizione\n04/03/2026;-5,00;OK\n31/02/2026;-10,00;X';
+  const { movimenti, errori } = R.parseCsv(testo, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';' });
+  assert.equal(movimenti.length, 0);
+  assert.equal(errori.length, 1);
+  assert.match(errori[0], /Riga 3/);
+  assert.match(errori[0], /31\/02\/2026/);
+});
+
+test('parseCsv con intestazione non trovata restituisce un errore', () => {
+  const { movimenti, errori } = R.parseCsv('A;B;C\n1;2;3', { data: 'Data', importo: 'Importo', descrizione: 'Descrizione', separatore: ';' });
+  assert.deepEqual(movimenti, []);
+  assert.equal(errori.length, 1);
+});
+
+test('parseCsv senza mappa non lancia', () => {
+  assert.deepEqual(R.parseCsv('x', undefined), { movimenti: [], errori: ['mappa mancante'] });
 });

@@ -293,35 +293,39 @@
     try { return (typeof globalThis !== 'undefined' && globalThis.localStorage) || null; } catch (e) { return null; }
   }
 
+  function copia(o) { return JSON.parse(JSON.stringify(o)); }
+
   function salvaMappatura(banca, mappa, archivio) {
-    if (typeof banca !== 'string' || !mappa || typeof mappa !== 'object') return false;
+    if (typeof banca !== 'string' || !mappa || typeof mappa !== 'object' || Array.isArray(mappa)) return false;
     const chiave = PREFISSO_MAPPA + banca;
-    const arch = archivioDi(archivio);
-    if (!arch) return false;
+    let copiaMappa;
+    try { copiaMappa = copia(mappa); } catch (e) { return false; }
     try {
-      arch.setItem(chiave, JSON.stringify(mappa));
-      mappatureSessione.delete(chiave);
-      return true;
-    } catch (e) {
-      try { mappatureSessione.set(chiave, JSON.parse(JSON.stringify(mappa))); } catch (e2) { /* ignora */ }
-      return false;
-    }
+      const arch = archivioDi(archivio);
+      if (arch) {
+        arch.setItem(chiave, JSON.stringify(copiaMappa));
+        mappatureSessione.delete(chiave);
+        return true;
+      }
+    } catch (e) { /* archivio non utilizzabile: resta per la sessione */ }
+    mappatureSessione.set(chiave, copiaMappa);
+    return false;
   }
 
+  // Una voce di sessione nasce solo da un salvataggio fallito o senza archivio: e piu recente di ogni valore salvato.
   function leggiMappatura(banca, archivio) {
     if (typeof banca !== 'string') return null;
     const chiave = PREFISSO_MAPPA + banca;
-    const arch = archivioDi(archivio);
-    if (arch) {
-      try {
-        const raw = arch.getItem(chiave);
-        if (raw) {
-          const m = JSON.parse(raw);
-          if (m && typeof m === 'object') return m;
-        }
-      } catch (e) { /* passa al fallback di sessione */ }
-    }
-    return mappatureSessione.has(chiave) ? mappatureSessione.get(chiave) : null;
+    if (mappatureSessione.has(chiave)) return copia(mappatureSessione.get(chiave));
+    try {
+      const arch = archivioDi(archivio);
+      const raw = arch && arch.getItem(chiave);
+      if (raw) {
+        const m = JSON.parse(raw);
+        if (m && typeof m === 'object' && !Array.isArray(m)) return m;
+      }
+    } catch (e) { /* illeggibile */ }
+    return null;
   }
 
   const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, salvaMappatura, leggiMappatura, mappatureSessione, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };

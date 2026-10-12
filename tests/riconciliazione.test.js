@@ -343,10 +343,48 @@ test('parametri non validi: false e null', () => {
   assert.equal(mem.size, 0);
 });
 
-test('nessun archivio disponibile: false e null senza eccezioni', () => {
+test('nessun archivio disponibile: false, ma la mappatura resta per la sessione', () => {
+  R.mappatureSessione.clear();
   assert.equal(typeof globalThis.localStorage, 'undefined');
-  assert.equal(R.salvaMappatura('BCC', { data: 'D' }), false);
-  assert.equal(R.leggiMappatura('BCC'), null);
+  const mappa = { data: 'D' };
+  assert.equal(R.salvaMappatura('BCC', mappa), false);
+  const letta = R.leggiMappatura('BCC');
+  assert.deepEqual(letta, mappa);
+  assert.notEqual(letta, mappa);
+  assert.equal(R.leggiMappatura('ALTRA'), null);
+  R.mappatureSessione.clear();
+});
+
+test('accessor dell archivio che lancia: mappatura di sessione', () => {
+  R.mappatureSessione.clear();
+  const archivio = { get setItem() { throw new Error('negato'); }, getItem() { throw new Error('negato'); } };
+  assert.equal(R.salvaMappatura('BCC', { data: 'D' }, archivio), false);
+  assert.deepEqual(R.leggiMappatura('BCC', archivio), { data: 'D' });
+  R.mappatureSessione.clear();
+});
+
+test('la voce di sessione prevale sul valore salvato e un salvataggio riuscito la elimina', () => {
+  R.mappatureSessione.clear();
+  const mem = new Map();
+  let rifiuta = false;
+  const archivio = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => { if (rifiuta) throw new Error('quota'); mem.set(k, v); } };
+  const A = { data: 'A' }, B = { data: 'B' }, C = { data: 'C' };
+  assert.equal(R.salvaMappatura('BCC', A, archivio), true);
+  rifiuta = true;
+  assert.equal(R.salvaMappatura('BCC', B, archivio), false);
+  assert.deepEqual(R.leggiMappatura('BCC', archivio), B);
+  rifiuta = false;
+  assert.equal(R.salvaMappatura('BCC', C, archivio), true);
+  assert.deepEqual(R.leggiMappatura('BCC', archivio), C);
+  assert.equal(R.mappatureSessione.size, 0);
+});
+
+test('array rifiutato e copia profonda in lettura', () => {
+  const mem = new Map();
+  const archivio = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  assert.equal(R.salvaMappatura('BCC', [1], archivio), false);
+  R.salvaMappatura('BCC', { a: { b: 1 } }, archivio);
+  assert.notEqual(R.leggiMappatura('BCC', archivio), R.leggiMappatura('BCC', archivio));
 });
 
 test('archivio che rifiuta setItem: la mappatura resta per la sessione', () => {

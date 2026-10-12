@@ -224,7 +224,41 @@
     return { totale, motivi };
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
+  // Abbinamento uno a uno. riconciliate: Set di impronte gia' riconciliate (saltate).
+  function abbina(movimenti, voci, riconciliate) {
+    const note = riconciliate || new Set();
+    const movs = [];
+    movimenti.forEach(m => { if (!note.has(m.impronta)) movs.push(m); });
+    const aperte = [];
+    voci.forEach(v => { if (v.pagato !== true) aperte.push(v); });
+    const coppie = [];
+    movs.forEach((m, mi) => aperte.forEach((v, vi) => {
+      const p = punteggio(m, v);
+      if (p) coppie.push({ mi, vi, totale: p.totale, motivi: p.motivi });
+    }));
+    coppie.sort((a, b) => b.totale - a.totale || a.mi - b.mi || a.vi - b.vi);
+    const usatiM = new Set(), usatiV = new Set(), proposte = [];
+    coppie.forEach(c => {
+      if (c.totale < SOGLIA_PROPOSTA) return;
+      if (usatiM.has(c.mi) || usatiV.has(c.vi)) return;
+      const rivale = coppie.some(o => o !== c && o.totale >= SOGLIA_PROPOSTA &&
+        (o.mi === c.mi || o.vi === c.vi) && !usatiM.has(o.mi) && !usatiV.has(o.vi));
+      if (rivale) return;
+      usatiM.add(c.mi); usatiV.add(c.vi);
+      proposte.push({ movimento: movs[c.mi], voce: aperte[c.vi], totale: c.totale, motivi: c.motivi });
+    });
+    const daDecidere = [], nonRiconciliati = [];
+    movs.forEach((m, mi) => {
+      if (usatiM.has(mi)) return;
+      const candidate = coppie.filter(c => c.mi === mi && c.totale >= SOGLIA_DUBBIO)
+        .map(c => ({ voce: aperte[c.vi], totale: c.totale, motivi: c.motivi }));
+      if (candidate.length) daDecidere.push({ movimento: m, candidate });
+      else nonRiconciliati.push(m);
+    });
+    return { proposte, daDecidere, nonRiconciliati };
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -203,3 +203,50 @@ test('nome troppo corto non basta', () => {
   const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'ARCOM SRL', numeroAssegno: null }, v);
   assert.equal(r.totale, 30 + 20);
 });
+
+test('due voci con stesso importo e data: un movimento abbina una sola voce', () => {
+  const voci = [
+    { id: 'a', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' },
+    { id: 'b', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' },
+  ];
+  const movimenti = [{ data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'x1' }];
+  const r = R.abbina(movimenti, voci, new Set());
+  assert.equal(r.proposte.length + r.daDecidere.length, 1);
+  assert.equal(r.daDecidere.length, 1);
+});
+
+test('movimento già riconciliato (impronta nota) viene saltato', () => {
+  const voci = [{ id: 'a', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' }];
+  const movimenti = [{ data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'x1' }];
+  const r = R.abbina(movimenti, voci, new Set(['x1']));
+  assert.equal(r.proposte.length, 0);
+  assert.equal(r.daDecidere.length, 0);
+  assert.equal(r.nonRiconciliati.length, 0);
+});
+
+test('voce già pagata non è candidata', () => {
+  const voci = [{ id: 'a', scadenza: '2026-03-10', importo: 100, pagato: true, tipoVoce: 'scadenza' }];
+  const movimenti = [{ data: '2026-03-10', importo: -100, descrizione: 'X', numeroAssegno: null, impronta: 'x2' }];
+  assert.equal(R.abbina(movimenti, voci, new Set()).nonRiconciliati.length, 1);
+});
+
+test('abbinamento univoco diventa proposta; punteggio medio va da decidere', () => {
+  const voci = [
+    { id: 'a', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' },
+    { id: 'b', scadenza: '2026-03-30', importo: 50, pagato: false, tipoVoce: 'assegno' },
+  ];
+  const movimenti = [
+    { data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'm1' },
+    { data: '2026-03-15', importo: -50, descrizione: 'ALTRO', numeroAssegno: null, impronta: 'm2' },
+    { data: '2026-05-01', importo: -7, descrizione: 'NIENTE', numeroAssegno: null, impronta: 'm3' },
+  ];
+  const r = R.abbina(movimenti, voci, new Set());
+  assert.equal(r.proposte.length, 1);
+  assert.equal(r.proposte[0].voce.id, 'a');
+  assert.ok(r.proposte[0].totale >= R.SOGLIA_PROPOSTA);
+  assert.equal(r.daDecidere.length, 1);
+  assert.equal(r.daDecidere[0].movimento.impronta, 'm2');
+  assert.equal(r.daDecidere[0].candidate[0].voce.id, 'b');
+  assert.equal(r.nonRiconciliati.length, 1);
+  assert.equal(r.nonRiconciliati[0].impronta, 'm3');
+});

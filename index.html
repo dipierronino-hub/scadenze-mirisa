@@ -1533,9 +1533,10 @@ $('sommaMensile').addEventListener('change', e => {
 // ---------- Riconciliazione movimenti bancari (logica in riconciliazione.js) ----------
 const RIC_REGEX_PDF = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})$/;
 function ricVociAperte() {
-  // Vista delle scadenze correnti: id dalla chiave, tipoVoce 'scadenza' (assegni e paghe non si scrivono).
+  // Vista delle scadenze correnti: id dalla chiave, tipoVoce 'scadenza' (assegni e paghe non si scrivono),
+  // beneficiario <- ente e numero <- codiceAvviso (i nomi reali dei campi in normalizza).
   const o = {};
-  Object.keys(S.items).forEach(k => { o[k] = Object.assign({}, S.items[k], { id: k, tipoVoce: 'scadenza' }); });
+  Object.keys(S.items).forEach(k => { o[k] = Object.assign({}, S.items[k], { id: k, tipoVoce: 'scadenza', beneficiario: S.items[k].ente || '', numero: S.items[k].codiceAvviso || '' }); });
   return o;
 }
 async function ricLeggiMovimenti(file) {
@@ -1567,7 +1568,14 @@ async function ricLeggiMovimenti(file) {
   }
   const leggi = m => xlsx ? R.righeDaMatrice(matrice, m) : R.parseCsv(testo, m);
   let mappa = R.leggiMappatura(banca);
-  if (mappa) return leggi(mappa); // mappatura gia salvata: gia validata in precedenza
+  if (mappa) {
+    const salvata = leggi(mappa);
+    if (!salvata.errori || !salvata.errori.length) return salvata;
+    if (!confirm('La mappatura salvata per questa banca non funziona più. Rifarla?')) return salvata;
+    // Elimina la mappatura salvata (archivio e sessione) e riparte dai prompt.
+    try { localStorage.removeItem('riconciliazione.mappa.' + banca); } catch (e) { /* archivio non disponibile */ }
+    R.mappatureSessione.delete('riconciliazione.mappa.' + banca);
+  }
   // Nessuna mappatura: la si chiede e la si salva solo se il file si legge senza errori.
   for (;;) {
     const col = (et, d) => prompt('Nome esatto della colonna "' + et + '" nell\'intestazione del file:', d);
@@ -1597,14 +1605,16 @@ async function ricSalva(conferme) {
     scarica(new Blob([JSON.stringify(S.items, null, 2)], { type: 'application/json' }), 'backup-prima-riconciliazione-' + new Date().toISOString().slice(0, 10) + '.json');
     const undo = {}, scrivibili = {};
     ids.forEach(id => {
-      const { tipoVoce, id: _id, ...resto } = updates[id]; // ripulisce i campi della vista
+      const { tipoVoce, id: _id, beneficiario, numero, ...resto } = updates[id]; // ripulisce i campi della vista
       if (S.items[id].id !== undefined) resto.id = S.items[id].id;
+      if (S.items[id].beneficiario !== undefined) resto.beneficiario = S.items[id].beneficiario;
+      if (S.items[id].numero !== undefined) resto.numero = S.items[id].numero;
       undo[id] = S.items[id];
       scrivibili[id] = conMeta(resto);
     });
     const ok = await scrivi(scrivibili, 'Riconciliate ' + ids.length + (ids.length === 1 ? ' voce' : ' voci'), undo);
     if (ok && saltate.length) alert(saltate.length + ' voci non aggiornate (gia pagate altrove o non scrivibili).');
-    return ok;
+    return ok ? { ok: true, scritte: ids } : false;
   } catch (e) {
     alert('Salvataggio non riuscito: nessuna modifica scritta (' + (e && e.message ? e.message : e) + ')');
     return false;
@@ -1617,7 +1627,7 @@ async function apriRiconciliazione(file) {
     if (esito.errori && esito.errori.length) { alert(esito.errori.slice(0, 5).join('\n')); return; }
     if (!esito.movimenti.length) { alert('Nessun movimento in uscita trovato nel file.'); return; }
     const R = window.Riconciliazione;
-    const vecchie = new Set(Object.values(S.items).map(it => it.riconciliazione && it.riconciliazione.impronta).filter(Boolean));
+    const vecchie = new Set(Object.values(S.items).filter(it => it.pagato === true).map(it => it.riconciliazione && it.riconciliazione.impronta).filter(Boolean));
     const voci = Object.values(ricVociAperte());
     $('ricConferma').innerHTML = '';
     apriModal('ricModal');
@@ -2006,7 +2016,7 @@ async function riapri(ids) {
   ids.forEach(id => {
     const it = S.items[id]; if (!it) return;
     undo[id] = it;
-    upd[id] = conMeta(Object.assign({}, it, { pagato: false, dataPagamento: null, banca: null }));
+    upd[id] = conMeta(Object.assign({}, it, { pagato: false, dataPagamento: null, banca: null, riconciliazione: null }));
   });
   if (await scrivi(upd, ids.length === 1 ? 'Riportata a "Da pagare"' : `${ids.length} rate riaperte`, undo)) {
     ids.forEach(id => S.sel.delete(id)); renderBulk();
@@ -2071,6 +2081,7 @@ $('editForm').addEventListener('submit', async e => {
       ricorrenzaMesi: ric, serie: ric ? (it.serie || it.id) : (it.serie || null)
     });
   }
+  if (!pagato) nuovo.riconciliazione = null; // una voce non pagata non ha riconciliazione
   chiudiModal('editModal');
   await scrivi({ [id]: conMeta(nuovo) }, 'Modifica salvata', { [id]: it });
 });

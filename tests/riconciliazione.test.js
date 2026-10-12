@@ -89,3 +89,32 @@ test('parseCsv con intestazione non trovata restituisce un errore', () => {
 test('parseCsv senza mappa non lancia', () => {
   assert.deepEqual(R.parseCsv('x', undefined), { movimenti: [], errori: ['mappa mancante'] });
 });
+
+test('righeDaMatrice usa la stessa logica di parseCsv', () => {
+  const matrice = [['Data', 'Importo', 'Descrizione'], ['05/03/2026', '-10,00', 'PAGAMENTO']];
+  const { movimenti } = R.righeDaMatrice(matrice, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione' });
+  assert.equal(movimenti.length, 1);
+  assert.equal(movimenti[0].importo, -10);
+});
+
+test('righeDaMatrice gestisce celle con punto e virgola, virgolette e numeri', () => {
+  const matrice = [['Data', 'Importo', 'Descrizione'], ['05/03/2026', -10.5, 'A;B "x"']];
+  const { movimenti } = R.righeDaMatrice(matrice, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione' });
+  assert.equal(movimenti.length, 1);
+  assert.equal(movimenti[0].descrizione, 'A;B "x"');
+});
+
+test('righePdfDaTesto estrae le righe che iniziano con una data', () => {
+  const righe = ['Estratto conto', '05/03/2026 PAGAMENTO FORNITORE -10,00', 'pagina 1'];
+  const out = R.righePdfDaTesto(righe, { regexRiga: /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})$/ });
+  assert.equal(out.length, 1);
+});
+
+test('righePdfDaTesto senza modello restituisce vuoto', () => {
+  assert.deepEqual(R.righePdfDaTesto(['x'], undefined), []);
+});
+
+test('leggiXlsx e leggiPdf senza librerie lanciano errore chiaro', async () => {
+  assert.throws(() => R.leggiXlsx(new ArrayBuffer(0)), /libreria non caricata/);
+  await assert.rejects(() => R.leggiPdf({}), /libreria non caricata/);
+});

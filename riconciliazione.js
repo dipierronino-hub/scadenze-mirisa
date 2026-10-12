@@ -131,7 +131,55 @@
     return new TextDecoder(codifica || 'utf-8').decode(bytes);
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto };
+  // Converte una matrice di celle (es. da XLSX) in movimenti, riusando parseCsv.
+  function righeDaMatrice(matrice, mappa) {
+    const cella = v => {
+      const t = String(v == null ? '' : v).replace(/\r\n|\n|\r/g, ' ');
+      return /[;"]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const testo = (matrice || []).map(r => (r || []).map(cella).join(';')).join('\n');
+    return parseCsv(testo, Object.assign({}, mappa, { separatore: ';' }));
+  }
+
+  // Tiene le righe di testo PDF che corrispondono a modello.regexRiga.
+  function righePdfDaTesto(righe, modello) {
+    if (!modello || !modello.regexRiga) return [];
+    const re = new RegExp(modello.regexRiga.source, modello.regexRiga.flags.replace(/[gy]/g, ''));
+    return (righe || []).filter(r => re.test(String(r).trim()));
+  }
+
+  // Solo browser: legge un XLSX con SheetJS globale e restituisce string[][].
+  function leggiXlsx(arrayBuffer) {
+    const X = globalThis.XLSX;
+    if (!X) throw new Error('libreria non caricata');
+    const wb = X.read(arrayBuffer, { type: 'array', cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+      .map(r => r.map(c => String(c == null ? '' : c)));
+  }
+
+  // Solo browser: estrae il testo di un PDF con pdf.js globale, una stringa per riga.
+  async function leggiPdf(file) {
+    const lib = globalThis.pdfjsLib;
+    if (!lib) throw new Error('libreria non caricata');
+    const buf = file && typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : file;
+    const pdf = await lib.getDocument({ data: buf }).promise;
+    const righe = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const contenuto = await (await pdf.getPage(p)).getTextContent();
+      let y = null, cur = [];
+      for (const it of contenuto.items) {
+        const yy = it.transform ? Math.round(it.transform[5]) : 0;
+        if (y !== null && Math.abs(yy - y) > 2) { righe.push(cur.join(' ').replace(/\s+/g, ' ').trim()); cur = []; }
+        y = yy;
+        cur.push(it.str);
+      }
+      if (cur.length) righe.push(cur.join(' ').replace(/\s+/g, ' ').trim());
+    }
+    return righe.filter(r => r);
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

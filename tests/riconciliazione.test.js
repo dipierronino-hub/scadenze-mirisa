@@ -411,7 +411,11 @@ test('C1: leggiXlsx usa valori grezzi: serial date -> gg/mm/aaaa, numeri con vir
   };
   const colonne = ['A', 'B', 'C'];
   globalThis.XLSX = {
-    read: () => ({ SheetNames: ['F1'], Sheets: { F1: ws } }),
+    // Come SheetJS reale: il formato della cella (z) esiste solo con cellNF: true.
+    read: (_buf, opts) => {
+      const senzaFormato = Object.fromEntries(Object.entries(ws).map(([k, c]) => [k, c && typeof c === 'object' && 'z' in c ? { ...c, z: undefined } : c]));
+      return { SheetNames: ['F1'], Sheets: { F1: opts && opts.cellNF ? ws : senzaFormato } };
+    },
     utils: {
       decode_range: () => ({ s: { r: 0, c: 0 }, e: { r: 1, c: 2 } }),
       encode_cell: ({ r, c }) => colonne[c] + (r + 1),

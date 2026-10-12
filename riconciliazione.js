@@ -157,7 +157,7 @@
   function leggiXlsx(arrayBuffer) {
     const X = globalThis.XLSX;
     if (!X) throw new Error('libreria non caricata');
-    const wb = X.read(arrayBuffer, { type: 'array', cellDates: false });
+    const wb = X.read(arrayBuffer, { type: 'array', cellDates: false, cellNF: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     // Valori grezzi: niente testo formattato (che puo scambiare giorno e mese). Le celle data
     // (formato data + numero seriale) diventano gg/mm/aaaa; i numeri restano numeri con virgola decimale.

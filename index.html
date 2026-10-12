@@ -1543,52 +1543,72 @@ async function ricLeggiMovimenti(file) {
   const nome = file.name.toLowerCase();
   if (nome.endsWith('.pdf')) {
     const righe = R.righePdfDaTesto(await R.leggiPdf(file), { regexRiga: RIC_REGEX_PDF });
-    if (!righe.length) return { errori: ['Impossibile leggere il PDF: usa CSV o XLSX'], movimenti: [] };
-    const matrice = [['data', 'descrizione', 'importo']].concat(righe.map(r => {
-      const m = RIC_REGEX_PDF.exec(r.trim()); return [m[1], m[2], m[3]];
-    }));
-    return R.righeDaMatrice(matrice, { data: 'data', importo: 'importo', descrizione: 'descrizione' });
+    const matrice = [['data', 'descrizione', 'importo']];
+    let scartate = 0;
+    righe.forEach(r => {
+      const m = RIC_REGEX_PDF.exec(String(r).trim());
+      if (!m) { scartate++; return; }
+      matrice.push([m[1], m[2], m[3]]);
+    });
+    if (matrice.length < 2) return { errori: ['Impossibile leggere il PDF: usa CSV o XLSX'], movimenti: [] };
+    const esitoPdf = R.righeDaMatrice(matrice, { data: 'data', importo: 'importo', descrizione: 'descrizione' });
+    if (scartate) esitoPdf.errori = (esitoPdf.errori || []).concat(scartate + ' righe PDF non leggibili');
+    return esitoPdf;
   }
   const banca = prompt('Nome della banca di questo estratto conto (es. BCC BARI E TARANTO):', BANCHE[0]);
   if (!banca) return null;
+  const xlsx = nome.endsWith('.xlsx');
+  const buf = await file.arrayBuffer();
+  let testo = null, matrice = null;
+  if (xlsx) matrice = R.leggiXlsx(buf);
+  else {
+    testo = R.decodificaTesto(new Uint8Array(buf), 'utf-8');
+    if (testo.indexOf('\uFFFD') !== -1) testo = R.decodificaTesto(new Uint8Array(buf), 'windows-1252');
+  }
+  const leggi = m => xlsx ? R.righeDaMatrice(matrice, m) : R.parseCsv(testo, m);
   let mappa = R.leggiMappatura(banca);
-  if (!mappa) {
+  if (mappa) return leggi(mappa); // mappatura gia salvata: gia validata in precedenza
+  // Nessuna mappatura: la si chiede e la si salva solo se il file si legge senza errori.
+  for (;;) {
     const col = (et, d) => prompt('Nome esatto della colonna "' + et + '" nell\'intestazione del file:', d);
     const data = col('data', 'Data'); if (!data) return null;
     const importo = col('importo', 'Importo'); if (!importo) return null;
     const descrizione = col('descrizione', 'Descrizione'); if (!descrizione) return null;
     mappa = { data, importo, descrizione, separatore: ';' };
-    if (!nome.endsWith('.xlsx')) {
+    if (!xlsx) {
       const sep = prompt('Separatore delle colonne del CSV (; oppure ,):', ';'); if (!sep) return null;
       mappa.separatore = sep.trim().slice(0, 1) || ';';
     }
-    if (!R.salvaMappatura(banca, mappa)) mostraToast('Mappatura valida solo per questa sessione');
+    const esito = leggi(mappa);
+    if (!esito.errori || !esito.errori.length) {
+      if (!R.salvaMappatura(banca, mappa)) mostraToast('Mappatura valida solo per questa sessione');
+      return esito;
+    }
+    if (!confirm('Mappatura non valida per questo file:\n' + esito.errori.slice(0, 5).join('\n') + '\n\nRiprovare con altre colonne?')) return null;
   }
-  const buf = await file.arrayBuffer();
-  if (nome.endsWith('.xlsx')) return R.righeDaMatrice(R.leggiXlsx(buf), mappa);
-  let testo = R.decodificaTesto(new Uint8Array(buf), 'utf-8');
-  if (testo.indexOf('\uFFFD') !== -1) testo = R.decodificaTesto(new Uint8Array(buf), 'windows-1252');
-  return R.parseCsv(testo, mappa);
 }
 // Salvataggio al conferma: legge S.items al momento (dati freschi), backup JSON, poi una sola update.
 async function ricSalva(conferme) {
-  const R = window.Riconciliazione;
-  const { updates, saltate } = R.costruisciAggiornamenti(conferme, ricVociAperte());
-  const ids = Object.keys(updates);
-  if (!ids.length) { alert('Nessuna voce aggiornata: ' + (saltate.length ? 'le voci sono gia pagate, non trovate o non scrivibili.' : 'nessuna conferma.')); return false; }
   try {
+    const R = window.Riconciliazione;
+    const { updates, saltate } = R.costruisciAggiornamenti(conferme, ricVociAperte());
+    const ids = Object.keys(updates);
+    if (!ids.length) { alert('Nessuna voce scrivibile: già pagate, non trovate o non scadenze'); return false; }
     scarica(new Blob([JSON.stringify(S.items, null, 2)], { type: 'application/json' }), 'backup-prima-riconciliazione-' + new Date().toISOString().slice(0, 10) + '.json');
-  } catch (e) { alert('⚠️ Backup non riuscito, nessuna scrittura eseguita: ' + e.message); return false; }
-  const undo = {}, scrivibili = {};
-  ids.forEach(id => {
-    const { tipoVoce, id: _id, ...resto } = updates[id]; // ripulisce i campi della vista
-    if (S.items[id].id !== undefined) resto.id = S.items[id].id;
-    undo[id] = S.items[id];
-    scrivibili[id] = conMeta(resto);
-  });
-  const ok = await scrivi(scrivibili, 'Riconciliate ' + ids.length + (ids.length === 1 ? ' voce' : ' voci'), undo);
-  if (ok && saltate.length) alert(saltate.length + ' voci non aggiornate (gia pagate altrove o non scrivibili).');
-  return ok;
+    const undo = {}, scrivibili = {};
+    ids.forEach(id => {
+      const { tipoVoce, id: _id, ...resto } = updates[id]; // ripulisce i campi della vista
+      if (S.items[id].id !== undefined) resto.id = S.items[id].id;
+      undo[id] = S.items[id];
+      scrivibili[id] = conMeta(resto);
+    });
+    const ok = await scrivi(scrivibili, 'Riconciliate ' + ids.length + (ids.length === 1 ? ' voce' : ' voci'), undo);
+    if (ok && saltate.length) alert(saltate.length + ' voci non aggiornate (gia pagate altrove o non scrivibili).');
+    return ok;
+  } catch (e) {
+    alert('Salvataggio non riuscito: nessuna modifica scritta (' + (e && e.message ? e.message : e) + ')');
+    return false;
+  }
 }
 async function apriRiconciliazione(file) {
   try {

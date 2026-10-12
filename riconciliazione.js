@@ -328,7 +328,116 @@
     return null;
   }
 
-  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, salvaMappatura, leggiMappatura, mappatureSessione, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
+  // ---- Schermata di conferma (solo DOM, nessuna scrittura: il chiamante salva) ----
+  function escapeHtml(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function euro(n) { return Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  function htmlMovimento(m) {
+    return '<div class="ric-mov"><strong>' + escapeHtml(m.data) + '</strong> &middot; ' + escapeHtml(euro(m.importo)) +
+      ' &euro; &middot; ' + escapeHtml(m.descrizione) + '</div>';
+  }
+
+  function htmlVoce(v) {
+    const nome = v.beneficiario || v.descrizione || v.numero || v.id;
+    let t = '<span class="ric-voce">' + escapeHtml(nome) + ' &middot; scad. ' + escapeHtml(v.scadenza) + ' &middot; ' + escapeHtml(euro(v.importo)) + ' &euro;';
+    if (v.banca) t += ' &middot; ' + escapeHtml(v.banca);
+    if (v.numero && v.tipoVoce === 'assegno') t += ' &middot; n. ' + escapeHtml(v.numero);
+    t += '</span>';
+    if (v.tipoVoce === 'assegno') t += ' <em class="ric-nota">da registrare nell&#39;app assegni</em>';
+    else if (v.tipoVoce === 'paga') t += ' <em class="ric-nota">da registrare nell&#39;app paghe</em>';
+    return t;
+  }
+
+  // risultato = esito di abbina; gestori = { conferma(conferme: Conferma[]), chiudi() }.
+  function apriConferma(contenitore, risultato, gestori) {
+    const r = risultato || {};
+    const g = gestori || {};
+    // Stato locale: proposte {scartata, spuntata}; daDecidere {scartato, scelta (indice candidata)}.
+    const proposte = (r.proposte || []).map(p => ({ p, scartata: false, spuntata: true }));
+    const dubbi = (r.daDecidere || []).map(d => ({ d, scartato: false, scelta: null }));
+    const non = r.nonRiconciliati || [];
+
+    function disegna() {
+      let h = '<div class="ric-conferma">';
+      h += '<h3>Proposte (' + proposte.filter(x => !x.scartata).length + ')</h3>';
+      if (!proposte.length) h += '<p class="ric-vuoto">Nessuna proposta.</p>';
+      proposte.forEach((x, i) => {
+        const v = x.p.voce, scrivibile = v.tipoVoce === 'scadenza';
+        h += '<div class="ric-riga' + (x.scartata ? ' ric-scartata' : '') + '">';
+        if (scrivibile && !x.scartata) h += '<input type="checkbox" data-az="spunta" data-i="' + i + '"' + (x.spuntata ? ' checked' : '') + '> ';
+        h += htmlMovimento(x.p.movimento) + '<div>' + htmlVoce(v) + '</div>' +
+          '<div class="ric-motivi">Punteggio ' + escapeHtml(x.p.totale) + ': ' + escapeHtml((x.p.motivi || []).join(', ')) + '</div>';
+        if (x.scartata) h += '<em>Scartata</em>';
+        else {
+          if (scrivibile) h += '<button type="button" data-az="conferma-una" data-i="' + i + '">Conferma</button> ';
+          h += '<button type="button" data-az="scarta-p" data-i="' + i + '">Scarta</button>';
+        }
+        h += '</div>';
+      });
+      h += '<h3>Da decidere (' + dubbi.filter(x => !x.scartato).length + ')</h3>';
+      if (!dubbi.length) h += '<p class="ric-vuoto">Nessun movimento da decidere.</p>';
+      dubbi.forEach((x, i) => {
+        h += '<div class="ric-riga' + (x.scartato ? ' ric-scartata' : '') + '">' + htmlMovimento(x.d.movimento);
+        if (x.scartato) h += '<em>Scartato</em>';
+        else {
+          x.d.candidate.forEach((c, j) => {
+            const scrivibile = c.voce.tipoVoce === 'scadenza';
+            h += '<div class="ric-cand' + (x.scelta === j ? ' ric-scelta' : '') + '">' + htmlVoce(c.voce) +
+              ' <span class="ric-motivi">(' + escapeHtml(c.totale) + ': ' + escapeHtml((c.motivi || []).join(', ')) + ')</span> ';
+            if (scrivibile) h += '<button type="button" data-az="scegli" data-i="' + i + '" data-j="' + j + '">' + (x.scelta === j ? 'Scelta' : 'Scegli') + '</button>';
+            h += '</div>';
+          });
+          h += '<button type="button" data-az="scarta-d" data-i="' + i + '">Scarta</button>';
+        }
+        h += '</div>';
+      });
+      h += '<h3>Non riconciliati (' + non.length + ')</h3>';
+      if (!non.length) h += '<p class="ric-vuoto">Nessuno.</p>';
+      non.forEach(m => { h += '<div class="ric-riga">' + htmlMovimento(m) + '</div>'; });
+      h += '<div class="ric-azioni"><button type="button" data-az="conferma-sel">Conferma selezionate</button> ' +
+        '<button type="button" data-az="chiudi">Chiudi</button></div></div>';
+      contenitore.innerHTML = h;
+    }
+
+    // Conferme scelte: proposte spuntate e non scartate, piu le scelte da decidere. Solo 'scadenza', una per voce.
+    function raccogli(soloProposta) {
+      const conferme = [], viste = new Set();
+      function aggiungi(voce, movimento) {
+        if (!voce || voce.tipoVoce !== 'scadenza' || viste.has(voce.id)) return;
+        viste.add(voce.id);
+        conferme.push({ voceId: voce.id, movimento });
+      }
+      if (soloProposta != null) {
+        const x = proposte[soloProposta];
+        if (x && !x.scartata) aggiungi(x.p.voce, x.p.movimento);
+        return conferme;
+      }
+      proposte.forEach(x => { if (!x.scartata && x.spuntata) aggiungi(x.p.voce, x.p.movimento); });
+      dubbi.forEach(x => { if (!x.scartato && x.scelta != null) aggiungi(x.d.candidate[x.scelta].voce, x.d.movimento); });
+      return conferme;
+    }
+
+    contenitore.onclick = function (ev) {
+      const el = ev.target && ev.target.closest ? ev.target.closest('[data-az]') : null;
+      if (!el) return;
+      const az = el.getAttribute('data-az');
+      const i = Number(el.getAttribute('data-i')), j = Number(el.getAttribute('data-j'));
+      if (az === 'spunta') { proposte[i].spuntata = !!el.checked; return; }
+      if (az === 'scarta-p') proposte[i].scartata = true;
+      else if (az === 'scarta-d') dubbi[i].scartato = true;
+      else if (az === 'scegli') dubbi[i].scelta = dubbi[i].scelta === j ? null : j;
+      else if (az === 'conferma-una') { if (g.conferma) g.conferma(raccogli(i)); return; }
+      else if (az === 'conferma-sel') { if (g.conferma) g.conferma(raccogli()); return; }
+      else if (az === 'chiudi') { if (g.chiudi) g.chiudi(); return; }
+      disegna();
+    };
+    disegna();
+  }
+
+  const api = { normalizzaImporto, normalizzaData, impronta, parseCsv, decodificaTesto, righeDaMatrice, righePdfDaTesto, leggiXlsx, leggiPdf, punteggio, abbina, costruisciAggiornamenti, salvaMappatura, leggiMappatura, apriConferma, mappatureSessione, SOGLIA_PROPOSTA, SOGLIA_DUBBIO, FINESTRA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Riconciliazione = api;
 })(typeof window !== 'undefined' ? window : this);

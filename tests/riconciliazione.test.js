@@ -237,7 +237,7 @@ test('abbinamento univoco diventa proposta; punteggio medio va da decidere', () 
   ];
   const movimenti = [
     { data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'm1' },
-    { data: '2026-03-15', importo: -50, descrizione: 'ALTRO', numeroAssegno: null, impronta: 'm2' },
+    { data: '2026-04-10', importo: -50, descrizione: 'ALTRO', numeroAssegno: null, impronta: 'm2' },
     { data: '2026-05-01', importo: -7, descrizione: 'NIENTE', numeroAssegno: null, impronta: 'm3' },
   ];
   const r = R.abbina(movimenti, voci, new Set());

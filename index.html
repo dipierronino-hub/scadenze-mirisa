@@ -1355,6 +1355,8 @@ function vociPaghe() {
 // ----- Riepilogo "Costi del mese" -----
 const ORDINE_TIPO = { scadenza: 0, assegno: 1, paga: 2 };
 let filtroOrigine = null; // null = tutte le voci; altrimenti 'scadenza' | 'assegno' | 'paga'
+let filtroStato = 'tutte'; // 'tutte' | 'pagato' | 'dapagare' | 'scadute'
+const ETICHETTA_STATO = { pagato: 'già pagate', dapagare: 'da pagare', scadute: 'scadute' };
 const ETICHETTA_ORIGINE = { scadenza: 'Scadenze', assegno: 'Assegni', paga: 'Paghe' };
 function ordineVoci(a, b) {
   return a.scadenza.localeCompare(b.scadenza) || ((ORDINE_TIPO[a.tipoVoce || 'scadenza'] || 0) - (ORDINE_TIPO[b.tipoVoce || 'scadenza'] || 0));
@@ -1402,13 +1404,14 @@ function renderSommaMensile() {
       ${tutte ? '' : '<small class="hint">Assegni e paghe si vedono con "Tutte le scadenze" selezionato.</small>'}
     </div>`;
 
-  const kpi = (colore, titolo, valore, sub) =>
-    `<div class="kpi" style="--k:${colore}"><div class="t">${titolo}</div><div class="v">${valore}</div><div class="s">${sub}</div></div>`;
+  const kpiStato = (stato, colore, titolo, valore, sub) =>
+    `<div class="kpi kpi-click${stato !== 'tutte' && filtroStato === stato ? ' attivo' : ''}" data-stato="${stato}" role="button" tabindex="0" style="--k:${colore}">
+       <div class="t">${titolo}</div><div class="v">${valore}</div><div class="s">${sub}</div></div>`;
   const kpis = `<div class="kpi-grid">
-      ${kpi('var(--primary)', 'Totale del mese', euroPunto(somma(delMese)), `${delMese.length} voci`)}
-      ${kpi('var(--blue)', 'Già pagato', euroPunto(somma(pagato)), `${pagato.length} voci`)}
-      ${kpi('var(--amber)', 'Da pagare', euroPunto(somma(daPagare)), `${daPagare.length} voci`)}
-      ${kpi('var(--red)', 'Scadute', String(scadute.length), scadute.length ? `${euroPunto(somma(scadute))} da regolarizzare` : 'Nessuna')}
+      ${kpiStato('tutte', 'var(--primary)', 'Totale del mese', euroPunto(somma(delMese)), `${delMese.length} voci`)}
+      ${kpiStato('pagato', 'var(--blue)', 'Già pagato', euroPunto(somma(pagato)), `${pagato.length} voci`)}
+      ${kpiStato('dapagare', 'var(--amber)', 'Da pagare', euroPunto(somma(daPagare)), `${daPagare.length} voci`)}
+      ${kpiStato('scadute', 'var(--red)', 'Scadute', String(scadute.length), scadute.length ? `${euroPunto(somma(scadute))} da regolarizzare` : 'Nessuna')}
     </div>`;
   const daOrigine = t => delMese.filter(v => (v.tipoVoce || 'scadenza') === t);
   const kpiOrigine = (origine, colore, titolo, valore, sub) =>
@@ -1421,7 +1424,16 @@ function renderSommaMensile() {
       ${kpiOrigine('paga', 'var(--text)', '💶 Paghe', inclPaghe ? euroPunto(somma(daOrigine('paga'))) : '–', inclPaghe ? `${daOrigine('paga').length} voci` : 'non incluse')}
     </div>`;
 
-  const visibili = filtroOrigine ? delMese.filter(v => (v.tipoVoce || 'scadenza') === filtroOrigine) : delMese;
+  const statoOk = {
+    tutte: () => true,
+    pagato: v => !!v.pagato,
+    dapagare: v => !v.pagato,
+    scadute: v => scadute.includes(v),
+  }[filtroStato] || (() => true);
+  const visibili = delMese.filter(v => statoOk(v) && (!filtroOrigine || (v.tipoVoce || 'scadenza') === filtroOrigine));
+  const filtri = [];
+  if (filtroStato !== 'tutte') filtri.push(ETICHETTA_STATO[filtroStato]);
+  if (filtroOrigine) filtri.push(ETICHETTA_ORIGINE[filtroOrigine].toLowerCase());
   const righe = visibili.map(v => {
     const st = statoVoce(v);
     return `<tr>
@@ -1438,8 +1450,8 @@ function renderSommaMensile() {
          <tbody>${righe}</tbody>
          <tfoot><tr><th colspan="3">Totale elencato</th><th class="r num">${euroPunto(somma(visibili))}</th><th></th></tr></tfoot>
        </table></div>`
-    : '<p class="hint">Nessuna voce in questo mese' + (filtroOrigine ? ' per ' + ETICHETTA_ORIGINE[filtroOrigine].toLowerCase() : '') + '.</p>';
-  const titoloVoci = `Voci di ${esc(meseLabel(meseAvviso))}` + (filtroOrigine ? ` · solo ${ETICHETTA_ORIGINE[filtroOrigine].toLowerCase()} <a href="#" data-tutte="1" style="margin-left:6px;">mostra tutte</a>` : '');
+    : '<p class="hint">Nessuna voce in questo mese' + (filtri.length ? ' · ' + filtri.join(' · ') : '') + '.</p>';
+  const titoloVoci = `Voci di ${esc(meseLabel(meseAvviso))}` + (filtri.length ? ` · solo ${filtri.join(' · ')} <a href="#" data-tutte="1" style="margin-left:6px;">mostra tutte</a>` : '');
 
   const mesi = {};
   voci.forEach(v => {
@@ -1488,7 +1500,9 @@ function renderSommaMensile() {
     ${andamento}`;
 }
 $('sommaMensile').addEventListener('click', e => {
-  if (e.target.closest && e.target.closest('[data-tutte]')) { e.preventDefault(); filtroOrigine = null; renderSommaMensile(); return; }
+  if (e.target.closest && e.target.closest('[data-tutte]')) { e.preventDefault(); filtroOrigine = null; filtroStato = 'tutte'; renderSommaMensile(); return; }
+  const st = e.target.closest && e.target.closest('[data-stato]');
+  if (st) { const o = st.dataset.stato; filtroStato = filtroStato === o ? 'tutte' : o; renderSommaMensile(); return; }
   const k = e.target.closest && e.target.closest('[data-origine]');
   if (!k) return;
   const o = k.dataset.origine;
@@ -1496,7 +1510,7 @@ $('sommaMensile').addEventListener('click', e => {
   renderSommaMensile();
 });
 $('sommaMensile').addEventListener('keydown', e => {
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.origine) { e.preventDefault(); e.target.click(); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && (e.target.dataset.origine || e.target.dataset.stato)) { e.preventDefault(); e.target.click(); }
 });
 $('sommaMensile').addEventListener('change', e => {
   if (e.target.id === 'meseAvviso') { meseAvviso = e.target.value; renderSommaMensile(); }

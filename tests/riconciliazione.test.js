@@ -213,6 +213,7 @@ test('due voci con stesso importo e data: un movimento abbina una sola voce', ()
   const r = R.abbina(movimenti, voci, new Set());
   assert.equal(r.proposte.length + r.daDecidere.length, 1);
   assert.equal(r.daDecidere.length, 1);
+  assert.equal(r.daDecidere[0].candidate.length, 2);
 });
 
 test('movimento già riconciliato (impronta nota) viene saltato', () => {
@@ -249,4 +250,26 @@ test('abbinamento univoco diventa proposta; punteggio medio va da decidere', () 
   assert.equal(r.daDecidere[0].candidate[0].voce.id, 'b');
   assert.equal(r.nonRiconciliati.length, 1);
   assert.equal(r.nonRiconciliati[0].impronta, 'm3');
+});
+
+test('voce già proposta ad un altro movimento non è candidata altrove', () => {
+  const voci = [{ id: 'v1', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' }];
+  const movimenti = [
+    { data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'm0' },
+    { data: '2026-04-05', importo: -100, descrizione: 'ALTRO', numeroAssegno: null, impronta: 'm1' },
+  ];
+  const r = R.abbina(movimenti, voci, new Set());
+  assert.equal(r.proposte.length, 1);
+  assert.equal(r.proposte[0].movimento.impronta, 'm0');
+  assert.equal(r.daDecidere.length, 0);
+  assert.equal(r.nonRiconciliati.length, 1);
+  assert.equal(r.nonRiconciliati[0].impronta, 'm1');
+});
+
+test('movimenti con stessa impronta nello stesso input contano una volta', () => {
+  const voci = [{ id: 'a', scadenza: '2026-03-10', importo: 100, pagato: false, tipoVoce: 'scadenza', beneficiario: 'ARCOM' }];
+  const mov = { data: '2026-03-10', importo: -100, descrizione: 'ARCOM', numeroAssegno: null, impronta: 'dup' };
+  const r = R.abbina([mov, Object.assign({}, mov)], voci, new Set());
+  assert.equal(r.proposte.length, 1);
+  assert.equal(r.daDecidere.length + r.nonRiconciliati.length, 0);
 });

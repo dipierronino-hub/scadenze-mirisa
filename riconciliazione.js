@@ -228,7 +228,12 @@
   function abbina(movimenti, voci, riconciliate) {
     const note = riconciliate || new Set();
     const movs = [];
-    movimenti.forEach(m => { if (!note.has(m.impronta)) movs.push(m); });
+    const viste = new Set();
+    movimenti.forEach(m => {
+      if (note.has(m.impronta)) return;
+      if (m.impronta != null) { if (viste.has(m.impronta)) return; viste.add(m.impronta); }
+      movs.push(m);
+    });
     const aperte = [];
     voci.forEach(v => { if (v.pagato !== true) aperte.push(v); });
     const coppie = [];
@@ -240,7 +245,6 @@
     const usatiM = new Set(), usatiV = new Set(), proposte = [];
     coppie.forEach(c => {
       if (c.totale < SOGLIA_PROPOSTA) return;
-      if (usatiM.has(c.mi) || usatiV.has(c.vi)) return;
       const rivale = coppie.some(o => o !== c && o.totale >= SOGLIA_PROPOSTA &&
         (o.mi === c.mi || o.vi === c.vi) && !usatiM.has(o.mi) && !usatiV.has(o.vi));
       if (rivale) return;
@@ -250,7 +254,7 @@
     const daDecidere = [], nonRiconciliati = [];
     movs.forEach((m, mi) => {
       if (usatiM.has(mi)) return;
-      const candidate = coppie.filter(c => c.mi === mi && c.totale >= SOGLIA_DUBBIO)
+      const candidate = coppie.filter(c => c.mi === mi && c.totale >= SOGLIA_DUBBIO && !usatiV.has(c.vi))
         .map(c => ({ voce: aperte[c.vi], totale: c.totale, motivi: c.motivi }));
       if (candidate.length) daDecidere.push({ movimento: m, candidate });
       else nonRiconciliati.push(m);

@@ -401,3 +401,68 @@ test('archivio con JSON corrotto: null', () => {
   const archivio = { getItem: () => '{non json', setItem() {} };
   assert.equal(R.leggiMappatura('BCC', archivio), null);
 });
+
+// ---- Fix wave: C1 (XLSX), C2 (forma reale delle voci), I3 (conferme parziali) ----
+test('C1: leggiXlsx usa valori grezzi: serial date -> gg/mm/aaaa, numeri con virgola', () => {
+  const ws = {
+    '!ref': 'A1:C2',
+    A1: { t: 's', v: 'Data' }, B1: { t: 's', v: 'Descrizione' }, C1: { t: 's', v: 'Importo' },
+    A2: { t: 'n', v: 46086, z: 'm/d/yy' }, B2: { t: 's', v: 'BONIFICO ARCOM SRL' }, C2: { t: 'n', v: -1234.56, z: '#,##0.00' },
+  };
+  const colonne = ['A', 'B', 'C'];
+  globalThis.XLSX = {
+    read: () => ({ SheetNames: ['F1'], Sheets: { F1: ws } }),
+    utils: {
+      decode_range: () => ({ s: { r: 0, c: 0 }, e: { r: 1, c: 2 } }),
+      encode_cell: ({ r, c }) => colonne[c] + (r + 1),
+      sheet_to_json: () => [['Data', 'Descrizione', 'Importo'], [46086, 'BONIFICO ARCOM SRL', -1234.56]],
+    },
+    SSF: {
+      is_date: z => /[dmy]/.test(z),
+      parse_date_code: n => (n === 46086 ? { y: 2026, m: 3, d: 5 } : null),
+    },
+  };
+  try {
+    const matrice = R.leggiXlsx(new ArrayBuffer(0));
+    assert.deepEqual(matrice[1], ['05/03/2026', 'BONIFICO ARCOM SRL', '-1234,56']);
+    const { movimenti, errori } = R.righeDaMatrice(matrice, { data: 'Data', importo: 'Importo', descrizione: 'Descrizione' });
+    assert.deepEqual(errori, []);
+    assert.equal(movimenti[0].data, '2026-03-05');
+    assert.equal(movimenti[0].importo, -1234.56);
+  } finally { delete globalThis.XLSX; }
+});
+
+test('C2: una voce con la forma reale dell\'app (ente, codiceAvviso) raggiunge SOGLIA_PROPOSTA', () => {
+  // Forma di normalizza() in index.html: nessun beneficiario/numero; li mappa ricVociAperte da ente/codiceAvviso.
+  const item = { id: 'a1', titolo: 'Bolletta luce', ente: 'Enel Energia', codiceAvviso: '300012345678', importo: 250, scadenza: '2026-03-10', pagato: false };
+  const vista = { ...item, tipoVoce: 'scadenza', beneficiario: item.ente, numero: item.codiceAvviso || '' };
+  const mov = { data: '2026-03-11', importo: -250, descrizione: 'ADDEBITO ENEL ENERGIA SPA', numeroAssegno: null, impronta: 'x1' };
+  const { totale } = R.punteggio(mov, vista);
+  assert.ok(totale >= R.SOGLIA_PROPOSTA, 'totale ' + totale);
+  assert.equal(R.abbina([mov], [vista], new Set()).proposte.length, 1);
+  // senza la mappatura (forma grezza) non ci sarebbe nome riconosciuto: solo 50
+  assert.ok(R.punteggio(mov, item).totale < R.SOGLIA_PROPOSTA);
+});
+
+function contenitoreFinto() {
+  const c = { innerHTML: '', ascolti: [], addEventListener(t, f) { this.ascolti.push(f); }, removeEventListener() {} };
+  c.clic = (az, i, j) => {
+    const el = { disabled: false, getAttribute: n => ({ 'data-az': az, 'data-i': String(i == null ? '' : i), 'data-j': String(j == null ? '' : j) }[n]) };
+    c.ascolti.forEach(f => f({ target: { closest: () => el } }));
+  };
+  return c;
+}
+
+test('I3: solo le voci in `scritte` risultano confermate, le saltate restano confermabili', async () => {
+  const mk = (id, imp) => ({ voce: { id, tipoVoce: 'scadenza', beneficiario: 'B' + id, importo: -imp * -1, scadenza: '2026-03-10' }, movimento: { data: '2026-03-10', importo: -imp, descrizione: 'x', impronta: id }, totale: 80, motivi: ['importo esatto'] });
+  const c = contenitoreFinto();
+  R.apriConferma(c, { proposte: [mk('v1', 10), mk('v2', 20)], daDecidere: [], nonRiconciliati: [] }, {
+    conferma: async conf => ({ ok: true, scritte: [conf[0].voceId] }),
+  });
+  c.clic('conferma-sel');
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal((c.innerHTML.match(/<em>Confermata<\/em>/g) || []).length, 1);
+  assert.match(c.innerHTML, /Non aggiornate/);
+  assert.match(c.innerHTML, /data-az="conferma-una" data-i="1"/);
+  assert.doesNotMatch(c.innerHTML, /data-az="conferma-una" data-i="0"/);
+});

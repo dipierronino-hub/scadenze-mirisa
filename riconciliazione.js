@@ -159,8 +159,25 @@
     if (!X) throw new Error('libreria non caricata');
     const wb = X.read(arrayBuffer, { type: 'array', cellDates: false });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    return X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
-      .map(r => r.map(c => String(c == null ? '' : c)));
+    // Valori grezzi: niente testo formattato (che puo scambiare giorno e mese). Le celle data
+    // (formato data + numero seriale) diventano gg/mm/aaaa; i numeri restano numeri con virgola decimale.
+    const righe = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    const inizio = ws['!ref'] && X.utils.decode_range ? X.utils.decode_range(ws['!ref']).s : { r: 0, c: 0 };
+    return righe.map((r, ri) => r.map((v, ci) => {
+      if (v == null) return '';
+      const cella = ws[X.utils.encode_cell({ r: inizio.r + ri, c: inizio.c + ci })];
+      if (typeof v === 'number') {
+        if (cella && cella.z && X.SSF && X.SSF.is_date(cella.z)) {
+          const d = X.SSF.parse_date_code(cella.v);
+          if (d) return String(d.d).padStart(2, '0') + '/' + String(d.m).padStart(2, '0') + '/' + String(d.y).padStart(4, '0');
+        }
+        return String(v).replace('.', ',');
+      }
+      if (v instanceof Date) {
+        return String(v.getUTCDate()).padStart(2, '0') + '/' + String(v.getUTCMonth() + 1).padStart(2, '0') + '/' + v.getUTCFullYear();
+      }
+      return String(v);
+    }));
   }
 
   // Solo browser: estrae il testo di un PDF con pdf.js globale, una stringa per riga.
@@ -215,7 +232,7 @@
     const desc = normTesto(mov.descrizione);
     const num = normTesto(voce.numero);
     if (numeroCitato(num, mov)) {
-      totale += 40; motivi.push('numero assegno citato');
+      totale += 40; motivi.push('numero citato');
     }
     if (Math.abs(diff) <= 3) { totale += 20; motivi.push('data entro 3 giorni'); }
     else { totale += 10; motivi.push('data entro 30 giorni'); }
@@ -457,18 +474,25 @@
       if (!s.conferme.length) { messaggio = 'Nessuna voce selezionata da confermare.'; disegna(); return; }
       if (!g.conferma) return;
       messaggio = '';
-      function riuscita() {
+      function riuscita(esitoOk) {
         inCorso = false;
-        s.righe.forEach(x => { if ('confermata' in x) x.confermata = true; else x.confermato = true; });
+        // Se il chiamante indica gli id scritti, solo quelle righe risultano confermate; le altre restano confermabili.
+        const scritte = esitoOk && Array.isArray(esitoOk.scritte) ? new Set(esitoOk.scritte) : null;
+        const saltate = [];
+        s.righe.forEach((x, k) => {
+          if (scritte && !scritte.has(s.conferme[k].voceId)) { saltate.push(s.conferme[k].voceId); return; }
+          if ('confermata' in x) x.confermata = true; else x.confermato = true;
+        });
+        if (saltate.length) messaggio = 'Non aggiornate (già pagate o non scrivibili): ' + saltate.join(', ') + '.';
         disegna();
       }
       function fallita(e) { inCorso = false; messaggio = 'Conferma non riuscita' + (e && e.message ? ': ' + e.message : '.'); disegna(); }
       inCorso = true;
       let esito;
       try { esito = g.conferma(s.conferme); } catch (e) { fallita(e); return; }
-      if (esito && typeof esito.then === 'function') esito.then(v => { if (v === false) fallita(); else riuscita(); }, fallita);
+      if (esito && typeof esito.then === 'function') esito.then(v => { if (v === false) fallita(); else riuscita(v); }, fallita);
       else if (esito === false) fallita();
-      else riuscita();
+      else riuscita(esito);
       if (inCorso) disegna(); // Promise in attesa: mostra i pulsanti disabilitati
     }
 

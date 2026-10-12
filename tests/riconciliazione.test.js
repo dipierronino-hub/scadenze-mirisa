@@ -23,3 +23,17 @@ test('impronta uguale per stessi dati, diversa per importo diverso', () => {
   assert.equal(R.impronta(a), R.impronta(b));
   assert.notEqual(R.impronta(a), R.impronta(c));
 });
+
+test('impronta è un digest esadecimale', () => {
+  const h = R.impronta({ data: '2026-03-05', importo: -10, descrizione: 'BONIFICO X' });
+  assert.match(h, /^[0-9a-f]{8,16}$/);
+});
+
+test('importo in ordine non italiano è illeggibile', () => {
+  assert.ok(Number.isNaN(R.normalizzaImporto('1,234.56')));
+});
+
+test('anno bisestile', () => {
+  assert.equal(R.normalizzaData('29/02/2024'), '2024-02-29');
+  assert.equal(R.normalizzaData('29/02/2026'), null);
+});

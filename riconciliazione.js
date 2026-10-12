@@ -7,7 +7,10 @@
     if (v == null) return NaN;
     let s = String(v).replace(/[\s€]/g, '');
     if (s === '') return NaN;
-    if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+    if (s.indexOf(',') !== -1) {
+      if (s.indexOf('.', s.indexOf(',')) !== -1) return NaN; // ordine non italiano ('1,234.56')
+      s = s.replace(/\./g, '').replace(',', '.');
+    }
     if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) return NaN;
     return Number(s);
   }
@@ -38,13 +41,26 @@
     return null;
   }
 
+  // Digest cyrb53 (sincrono, deterministico), restituito come hex di 14 caratteri.
+  function cyrb53(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
+  }
+
   // Chiave stabile da data + importo + descrizione normalizzata.
   function impronta(mov) {
     const desc = String(mov.descrizione == null ? '' : mov.descrizione)
       .toLowerCase().replace(/\s+/g, ' ').trim();
     const imp = Number(mov.importo);
     const impStr = Number.isFinite(imp) ? imp.toFixed(2) : String(mov.importo);
-    return [mov.data, impStr, desc].join('|');
+    return cyrb53([mov.data, impStr, desc].join('|'));
   }
 
   const api = { normalizzaImporto, normalizzaData, impronta };

@@ -193,6 +193,18 @@
     return String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
+  const LUNGHEZZA_MINIMA = 4; // numeri e nomi piu corti non bastano per riconoscere una voce
+
+  function escapeRegex(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  // Numero citato come token intero nella descrizione, oppure uguale al numero assegno del movimento.
+  function numeroCitato(num, mov) {
+    if (num.length < LUNGHEZZA_MINIMA) return false;
+    if (normTesto(mov.numeroAssegno) === num) return true;
+    const testo = ' ' + String(mov.descrizione == null ? '' : mov.descrizione).toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+    return new RegExp('(^|[^0-9a-z])' + escapeRegex(num) + '($|[^0-9a-z])').test(testo);
+  }
+
   // Punteggio di un movimento rispetto a una voce. null se importo o finestra non combaciano.
   function punteggio(mov, voce) {
     if (Math.round(Math.abs(mov.importo) * 100) !== Math.round(Math.abs(voce.importo) * 100)) return null;
@@ -202,12 +214,12 @@
     const motivi = ['importo esatto'];
     const desc = normTesto(mov.descrizione);
     const num = normTesto(voce.numero);
-    if (num && (normTesto(mov.numeroAssegno) === num || desc.indexOf(num) !== -1)) {
+    if (numeroCitato(num, mov)) {
       totale += 40; motivi.push('numero assegno citato');
     }
     if (Math.abs(diff) <= 3) { totale += 20; motivi.push('data entro 3 giorni'); }
     else { totale += 10; motivi.push('data entro 30 giorni'); }
-    const nomi = [voce.beneficiario, voce.banca].map(normTesto).filter(n => n);
+    const nomi = [voce.beneficiario, voce.banca].map(normTesto).filter(n => n.length >= LUNGHEZZA_MINIMA);
     if (nomi.some(n => desc.indexOf(n) !== -1)) { totale += 10; motivi.push('nome riconosciuto'); }
     return { totale, motivi };
   }

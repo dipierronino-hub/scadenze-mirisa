@@ -125,7 +125,8 @@ test('importo esatto, data vicina e nome riconosciuto: proposta', () => {
   const mov = { data: '2026-03-11', importo: -100, descrizione: 'BONIFICO A FAVORE ARCOM SRL', numeroAssegno: null };
   const { totale, motivi } = R.punteggio(mov, voce);
   assert.equal(totale, 20 + 30 + 10);
-  assert.ok(motivi.length >= 2);
+  // formulazione implementata dei motivi
+  assert.deepEqual(motivi, ['importo esatto', 'data entro 3 giorni', 'nome riconosciuto']);
 });
 
 test('numero assegno citato pesa 40', () => {
@@ -163,4 +164,42 @@ test('nome confrontato in forma normalizzata; segno ignorato', () => {
   const v = { ...voce, beneficiario: 'Arcom S.r.l.' };
   const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'Pagamento ARCOM SRL fatt.1', numeroAssegno: null }, v);
   assert.equal(r.totale, 30 + 20 + 10);
+});
+
+test('numero assegno corto non conta come sottostringa', () => {
+  for (const numero of ['5', '12']) {
+    const v = { ...voce, numero, beneficiario: '' };
+    const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'fatt 125', numeroAssegno: null }, v);
+    assert.equal(r.totale, 30 + 20);
+  }
+});
+
+test('numero assegno come token intero nella descrizione pesa 40', () => {
+  const v = { ...voce, numero: '000123' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'ASSEGNO 000123 ARCOM', numeroAssegno: null }, v);
+  assert.equal(r.totale, 40 + 30 + 20 + 10);
+});
+
+test('numero dentro un token piu lungo non conta', () => {
+  const v = { ...voce, numero: '000123', beneficiario: '' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'RIF 0001234 X', numeroAssegno: null }, v);
+  assert.equal(r.totale, 30 + 20);
+});
+
+test('fascia data: 3 giorni 20, 4 giorni 10', () => {
+  const m = d => ({ data: d, importo: -100, descrizione: 'X', numeroAssegno: null });
+  assert.equal(R.punteggio(m('2026-03-13'), voce).totale, 30 + 20);
+  assert.equal(R.punteggio(m('2026-03-14'), voce).totale, 30 + 10);
+});
+
+test('numeroAssegno nullo ma numero in descrizione conta', () => {
+  const v = { ...voce, numero: '000123', beneficiario: '' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'ASS. 000123', numeroAssegno: null }, v);
+  assert.equal(r.totale, 40 + 30 + 20);
+});
+
+test('nome troppo corto non basta', () => {
+  const v = { ...voce, beneficiario: 'SRL' };
+  const r = R.punteggio({ data: '2026-03-10', importo: -100, descrizione: 'ARCOM SRL', numeroAssegno: null }, v);
+  assert.equal(r.totale, 30 + 20);
 });

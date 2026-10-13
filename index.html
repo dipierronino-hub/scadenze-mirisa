@@ -2921,23 +2921,37 @@ function renderArchivio() {
   $('archInfo').textContent = `${archDocs.length} documenti archiviati · circa ${kb} KB · ${visibili.length} visibili`;
   $('archLista').innerHTML = visibili.length
     ? '<table><thead><tr><th>Data</th><th>Documento</th><th>Piano / rata</th><th>Importo</th><th>Banca</th><th>Codice avviso</th><th></th></tr></thead><tbody>' +
-      visibili.map(({ d, i }) => `<tr>
+      visibili.map(({ d, i }) => `<tr class="arch-riga" data-arch="${i}" title="Tocca per aprire il PDF">
         <td class="num">${formatData(d.data)}</td>
         <td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td>
         <td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td>
         <td class="num">${formatEuro(d.importo)}</td>
         <td>${esc(d.it.banca || '-')}</td>
         <td class="num">${esc(d.avviso || '-')}</td>
-        <td><button class="ib" data-arch="${i}" title="Scarica PDF">⬇️</button></td>
+        <td><button class="ib" data-scarica="${i}" title="Scarica PDF">⬇️</button></td>
       </tr>`).join('') + '</tbody></table>'
     : '<p class="hint">Nessun documento archiviato. Carica un modulo di pagamento o una quietanza.</p>';
 }
 $('archCerca').addEventListener('input', renderArchivio);
+// Apre il PDF archiviato in una nuova scheda, senza scaricarlo. Se il browser blocca la scheda, lo scarica.
+function apriBase64(b64, nome) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const finestra = window.open(url, '_blank');
+  if (!finestra) scarica(blob, nome);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 $('archLista').addEventListener('click', e => {
-  const b = e.target.closest('[data-arch]');
-  if (!b) return;
-  const d = archDocs[Number(b.dataset.arch)];
-  if (d) scaricaBase64(d.pdf, d.nome);
+  const btnScarica = e.target.closest('[data-scarica]');
+  const riga = e.target.closest('[data-arch]');
+  const indice = btnScarica ? btnScarica.dataset.scarica : (riga ? riga.dataset.arch : null);
+  if (indice === null) return;
+  const d = archDocs[Number(indice)];
+  if (!d) return;
+  if (btnScarica) scaricaBase64(d.pdf, d.nome); else apriBase64(d.pdf, d.nome);
 });
 
 // ---------- Nuova scadenza (bollo, assicurazione, multe…) ----------

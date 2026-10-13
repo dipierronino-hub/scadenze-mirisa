@@ -2912,25 +2912,97 @@ function scaricaBase64(b64, nome) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   scarica(new Blob([bytes], { type: 'application/pdf' }), nome);
 }
+// ---------- Cartelle dell'archivio: una sezione per ente e anno, scaricabile in ZIP ----------
+const ENTI_NOTI = [
+  [/\bwind\b|windtre|wind tre/i, 'Wind Tre'],
+  [/\btim\b|telecom/i, 'TIM'],
+  [/vodafone/i, 'Vodafone'],
+  [/iliad/i, 'Iliad'],
+  [/sorgenia/i, 'Sorgenia'],
+  [/\benel\b/i, 'Enel'],
+  [/plenitude|\beni\b/i, 'Eni Plenitude'],
+  [/edison/i, 'Edison'],
+  [/\ba2a\b/i, 'A2A'],
+  [/\bacea\b/i, 'Acea'],
+  [/\bhera\b/i, 'Hera'],
+  [/\biren\b/i, 'Iren'],
+];
+// Nome della cartella a partire dall'ente: fornitori noti in forma unica, altrimenti il nome pulito dell'ente
+function nomeCartella(ente) {
+  const s = String(ente || '').trim();
+  if (!s) return 'Senza ente';
+  const noto = ENTI_NOTI.find(([re]) => re.test(s));
+  if (noto) return noto[1];
+  return s.replace(/\b(s\.?\s?p\.?\s?a\.?|s\.?\s?r\.?\s?l\.?)\b\.?/gi, '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Senza ente';
+}
+function nomeFileSicuro(s) { return String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120); }
+function base64ADati(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+// ZIP senza compressione (i PDF sono già compressi): [{nome, bytes}] → Blob
+function creaZip(file) {
+  const enc = new TextEncoder(), parti = [], centrale = [];
+  const u16 = v => [v & 0xff, (v >>> 8) & 0xff];
+  const u32 = v => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+  let offset = 0;
+  for (const f of file) {
+    const nome = enc.encode(f.nome), crc = crc32(f.bytes), size = f.bytes.length;
+    const testa = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(size), ...u32(size), ...u16(nome.length), ...u16(0)]);
+    parti.push(testa, nome, f.bytes);
+    centrale.push({ nome, crc, size, offset });
+    offset += testa.length + nome.length + size;
+  }
+  const inizioCentrale = offset;
+  let lunghezzaCentrale = 0;
+  for (const c of centrale) {
+    const rec = new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(c.crc), ...u32(c.size), ...u32(c.size), ...u16(c.nome.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(c.offset)]);
+    parti.push(rec, c.nome);
+    lunghezzaCentrale += rec.length + c.nome.length;
+  }
+  parti.push(new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(centrale.length), ...u16(centrale.length), ...u32(lunghezzaCentrale), ...u32(inizioCentrale), ...u16(0)]));
+  return new Blob(parti, { type: 'application/zip' });
+}
+let gruppiArch = []; // per ogni sezione mostrata: { nome, indici } con gli indici in archDocs
 function renderArchivio() {
   archDocs = documentiArchivio();
   const q = $('archCerca').value.trim().toLowerCase();
   const visibili = archDocs.map((d, i) => ({ d, i })).filter(({ d }) =>
-    !q || [d.tipo, d.it.pianoNome, etichettaRata(d.it), d.it.banca, d.avviso, d.nome].join(' ').toLowerCase().includes(q));
+    !q || [d.tipo, d.it.pianoNome, etichettaRata(d.it), d.it.banca, d.avviso, d.nome, d.it.ente].join(' ').toLowerCase().includes(q));
   const kb = Math.round(archDocs.reduce((s, d) => s + d.pdf.length * 0.75, 0) / 1024);
   $('archInfo').textContent = `${archDocs.length} documenti archiviati · circa ${kb} KB · ${visibili.length} visibili`;
-  $('archLista').innerHTML = visibili.length
-    ? '<table><thead><tr><th>Data</th><th>Documento</th><th>Piano / rata</th><th>Importo</th><th>Banca</th><th>Codice avviso</th><th></th></tr></thead><tbody>' +
-      visibili.map(({ d, i }) => `<tr class="arch-riga" data-arch="${i}" title="Tocca per aprire il PDF">
-        <td class="num">${formatData(d.data)}</td>
-        <td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td>
-        <td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td>
-        <td class="num">${formatEuro(d.importo)}</td>
-        <td>${esc(d.it.banca || '-')}</td>
-        <td class="num">${esc(d.avviso || '-')}</td>
-        <td><button class="ib" data-scarica="${i}" title="Scarica PDF">⬇️</button></td>
-      </tr>`).join('') + '</tbody></table>'
-    : '<p class="hint">Nessun documento archiviato. Carica un modulo di pagamento o una quietanza.</p>';
+  gruppiArch = [];
+  if (!visibili.length) { $('archLista').innerHTML = '<p class="hint">Nessun documento archiviato. Carica un modulo di pagamento o una quietanza.</p>'; return; }
+  const gruppi = new Map();
+  visibili.forEach(({ d, i }) => {
+    const anno = String(d.data || '').slice(0, 4) || 'senza data';
+    const cart = nomeCartella(d.it.ente);
+    const k = cart + '|' + anno;
+    if (!gruppi.has(k)) gruppi.set(k, { cart, anno, righe: [] });
+    gruppi.get(k).righe.push({ d, i });
+  });
+  const ordine = [...gruppi.values()].sort((a, b) => a.cart.localeCompare(b.cart, 'it') || b.anno.localeCompare(a.anno));
+  let html = '<table class="arch-tab"><thead><tr><th>Data</th><th>Documento</th><th>Piano / rata</th><th>Importo</th><th>Banca</th><th>Codice avviso</th><th></th></tr></thead><tbody>';
+  ordine.forEach(g => {
+    const gi = gruppiArch.length;
+    gruppiArch.push({ nome: `${g.cart} ${g.anno}`, indici: g.righe.map(r => r.i) });
+    html += `<tr class="arch-gruppo"><td colspan="7"><b>📁 ${esc(g.cart)} · ${esc(g.anno)}</b> <small>${g.righe.length} ${g.righe.length === 1 ? 'documento' : 'documenti'}</small> <button class="btn btn-ghost" type="button" data-zip="${gi}">📦 Scarica cartella (.zip)</button></td></tr>`;
+    g.righe.forEach(({ d, i }) => { html += `<tr class="arch-riga" data-arch="${i}" title="Tocca per aprire il PDF"><td class="num">${formatData(d.data)}</td><td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td><td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td><td class="num">${formatEuro(d.importo)}</td><td>${esc(d.it.banca || "-")}</td><td class="num">${esc(d.avviso || "-")}</td><td><button class="ib" data-scarica="${i}" title="Scarica PDF">⬇️</button></td></tr>`; });
+  });
+  html += '</tbody></table>';
+  $('archLista').innerHTML = html;
 }
 $('archCerca').addEventListener('input', renderArchivio);
 // Apre il PDF archiviato in una nuova scheda, senza scaricarlo. Se il browser blocca la scheda, lo scarica.
@@ -2945,6 +3017,18 @@ function apriBase64(b64, nome) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 $('archLista').addEventListener('click', e => {
+  const btnZip = e.target.closest('[data-zip]');
+  if (btnZip) {
+    const g = gruppiArch[Number(btnZip.dataset.zip)];
+    if (!g) return;
+    const documenti = g.indici.map(i => archDocs[i]).filter(Boolean).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    const file = documenti.map((d, n) => ({
+      nome: `${String(n + 1).padStart(2, '0')} ${nomeFileSicuro(`${d.data || 'senza-data'} ${d.tipo} ${d.it.titolo || ''}`)}.pdf`,
+      bytes: base64ADati(d.pdf)
+    }));
+    if (file.length) scarica(creaZip(file), nomeFileSicuro(g.nome) + '.zip');
+    return;
+  }
   const btnScarica = e.target.closest('[data-scarica]');
   const riga = e.target.closest('[data-arch]');
   const indice = btnScarica ? btnScarica.dataset.scarica : (riga ? riga.dataset.arch : null);

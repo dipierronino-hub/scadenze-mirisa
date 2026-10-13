@@ -916,7 +916,7 @@ function conMeta(it) {
 // ==============================================================
 const MAX_MB_AI = 15;
 const MODELLO_AI_DEFAULT = 'gemini-3.5-flash-lite';
-const DOC_MAX_BYTES = 600 * 1024; // il documento scansionato viene allegato alla scadenza solo se non supera questa dimensione
+const DOC_MAX_BYTES = 1024 * 1024; // il documento scansionato viene allegato alla scadenza solo se non supera questa dimensione
 let aiDocPendente = null; // documento della scansione IA, da archiviare con la scadenza che si sta salvando
 const leggiLS = (k, def = '') => { try { const v = localStorage.getItem(k); return v === null ? def : v; } catch (e) { return def; } };
 const scriviLS = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* storage non disponibile */ } };
@@ -1054,27 +1054,30 @@ async function hashFile(file) {
 async function documentoPerArchivio(file) {
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
   const hash = await hashFile(file);
-  const blob = isPdf
-    ? (file.size <= DOC_MAX_BYTES ? file : await alleggeriscPdf(file, DOC_MAX_BYTES))
-    : await immagineInPdf(file);
+  let blob = null;
+  if (isPdf) blob = file.size <= DOC_MAX_BYTES ? file : await alleggeriscPdf(file, DOC_MAX_BYTES);
+  else for (const [lato, q] of [[1600, 0.75], [1200, 0.6], [1000, 0.5]]) {
+    blob = await immagineInPdf(file, lato, q);
+    if (blob && blob.size <= DOC_MAX_BYTES) break;
+  }
   const pdf = blob && blob.size <= DOC_MAX_BYTES ? await fileToBase64(blob) : null;
   return { nomeFile: file.name.replace(/\.[^.]+$/, '') + '.pdf', pdf, hash };
 }
 // Immagine (foto, scansione JPG/PNG) → PDF di una pagina, ridotta a 1600 px. Restituisce un Blob o null.
-async function immagineInPdf(file) {
+async function immagineInPdf(file, lato = 1600, qualita = 0.75) {
   if (typeof window.jspdf === 'undefined' || !file.type.startsWith('image/')) return null;
   const { jsPDF } = window.jspdf;
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
-    const scala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const scala = Math.min(1, lato / Math.max(img.naturalWidth, img.naturalHeight));
     const w = Math.round(img.naturalWidth * scala), h = Math.round(img.naturalHeight * scala);
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
     const doc = new jsPDF({ unit: 'pt', format: [w, h], orientation: w > h ? 'l' : 'p', compress: true });
-    doc.addImage(canvas.toDataURL('image/jpeg', 0.75), 'JPEG', 0, 0, w, h);
+    doc.addImage(canvas.toDataURL('image/jpeg', qualita), 'JPEG', 0, 0, w, h);
     return doc.output('blob');
   } catch (e) {
     return null;

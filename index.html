@@ -2785,7 +2785,8 @@ function trovaRataPerModulo(mod, ist) {
 function parseQuietanza(testo) {
   const avviso = (testo.match(/Codice\s+avviso\s*(\d{17,20})/i) || [])[1] || '';
   const iuv = (testo.match(/ID\s+univoco\s+versamento\s*(\d{15,20})/i) || [])[1] || '';
-  const imp = (testo.match(/Importo\s+totale\s*([\d.]+,\d{2})/i) || testo.match(/Importo\s*([\d.]+,\d{2})/i) || [])[1];
+  // Importo della rata, senza commissioni: prima "Importo", poi "Importo totale" solo se manca
+  const imp = (testo.match(/Importo\s*([\d.]+,\d{2})/i) || testo.match(/Importo\s+totale\s*([\d.]+,\d{2})/i) || [])[1];
   const dp = testo.match(/Data\s+pagamento\s*(\d{2}\/\d{2}\/\d{4})/i);
   const tr = (testo.match(/ID\s+transazione\s*([a-f0-9]{20,40})/i) || [])[1] || '';
   const pm = testo.match(/PSP\s+di\s+addebito\s*(?:\d{5}\s*)?(.+?)\s*(?:Identificativo\s+PSP|Tipo\s+identificativo|ID\s+transazione|IBAN|$)/i);
@@ -2841,7 +2842,7 @@ async function leggiQuietanzaIA(file) {
   const prompt = `Questa è una quietanza di pagamento PagoPA italiana (può essere una foto). Estrai:
 "avviso": codice avviso, 18-20 cifre (es. 180014...);
 "iuv": ID univoco versamento, se presente, altrimenti null;
-"importo": importo pagato come numero con punto decimale;
+"importo": importo della bolletta (la rata), come numero con punto decimale, SENZA le commissioni della banca (non usare il totale);
 "dataPagamento": data di pagamento in formato YYYY-MM-DD;
 "psp": nome del prestatore di servizi di pagamento o della banca di addebito;
 "idTransazione": ID transazione, se presente, altrimenti null.

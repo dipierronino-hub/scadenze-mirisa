@@ -2834,6 +2834,26 @@ $('importModuloFile').addEventListener('change', async e => {
   }
 });
 
+// Quietanza ADER senza rata nell'app: chiede istanza e numero di rata, crea la rata (ancora da pagare) e la restituisce.
+// Il pagamento e l'archiviazione della quietanza proseguono nel flusso normale.
+async function creaRataDaQuietanza(q) {
+  const istanza = (prompt('Numero di istanza ADER (es. 569076):') || '').replace(/\D/g, '');
+  if (!istanza) return null;
+  const r = (prompt('Numero di rata e totale (es. 3/84):') || '').match(/(\d+)\s*\/\s*(\d+)/);
+  if (!r) return null;
+  const nr = Number(r[1]), tot = Number(r[2]);
+  const pianoNome = `ADER · Istanza n. ${istanza}`;
+  const it = normalizza({
+    pianoId: 'ADER_' + istanza, pianoNome, numeroRata: nr, totaleRatePiano: tot,
+    titolo: `${pianoNome} - Rata ${nr}`, categoria: 'Rateizzazione Equitalia',
+    importo: q.importo, scadenza: q.dataPagamento, codiceAvviso: q.avviso, ente: 'ADER',
+    pagato: false, note: 'Creata dalla quietanza'
+  });
+  if (!(await scrivi({ [it.id]: conMeta(it) }, `Rata ${nr}/${tot} creata dalla quietanza`))) return null;
+  S.items[it.id] = conMeta(it);
+  return S.items[it.id];
+}
+
 $('dropQuietanza').addEventListener('click', () => $('quietanzaFile').click());
 $('quietanzaFile').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -2846,7 +2866,12 @@ $('quietanzaFile').addEventListener('change', async e => {
     const q = parseQuietanza(await leggiTestoPdf(file));
     if (!q.avviso && !q.iuv) { st.textContent = '❌ Codice avviso non trovato: non sembra una quietanza PagoPA.'; return; }
     if (!q.importo || !q.dataPagamento) { st.textContent = '❌ Importo o data di pagamento non leggibili in questa quietanza.'; return; }
-    const it = rataPerAvviso(q.avviso, q.iuv);
+    let it = rataPerAvviso(q.avviso, q.iuv);
+    if (!it && /^180014/.test(q.avviso)) {
+      // Quietanza ADER senza rata: crea la rata con istanza e numero di rata inseriti dall'utente
+      it = await creaRataDaQuietanza(q);
+      if (!it) { st.textContent = 'Operazione annullata: nessuna rata creata.'; return; }
+    }
     if (!it) { st.textContent = `❌ Nessuna rata con codice avviso ${q.avviso}. Importa prima il modulo di pagamento.`; return; }
     let daArchiviare = file.size <= PDF_MAX_BYTES ? file : null;
     if (!daArchiviare) {

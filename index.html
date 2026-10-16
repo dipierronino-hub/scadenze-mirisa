@@ -2837,9 +2837,24 @@ $('importModuloFile').addEventListener('change', async e => {
 // Quietanza ADER senza rata nell'app: chiede istanza e numero di rata, crea la rata (ancora da pagare) e la restituisce.
 // Il pagamento e l'archiviazione della quietanza proseguono nel flusso normale.
 async function creaRataDaQuietanza(q) {
-  const istanza = (prompt('Numero di istanza ADER (es. 569076):') || '').replace(/\D/g, '');
+  // Le rate di una stessa istanza hanno lo stesso importo: cerca le istanze con rate uguali alla quietanza
+  const stessoImporto = lista().filter(it => istanzaADER(it) && Math.abs((Number(it.importo) || 0) - q.importo) < 0.005);
+  const istanze = [...new Set(stessoImporto.map(istanzaADER))];
+  let istanza = '';
+  if (istanze.length === 1) {
+    if (confirm(`La quietanza ha importo ${formatEuro(q.importo)}, come le rate dell'istanza n. ${istanze[0]}.\n\nUsare questa istanza?`)) istanza = istanze[0];
+  } else if (istanze.length > 1) {
+    istanza = (prompt(`Più istanze hanno rate da ${formatEuro(q.importo)}: ${istanze.join(', ')}.\nQuale è questa quietanza?`) || '').replace(/\D/g, '');
+  }
+  if (!istanza) istanza = (prompt('Numero di istanza ADER (es. 569076):') || '').replace(/\D/g, '');
   if (!istanza) return null;
-  const r = (prompt('Numero di rata e totale (es. 3/84):') || '').match(/(\d+)\s*\/\s*(\d+)/);
+  // Rata suggerita: se per l'istanza manca una sola rata tra quelle note, la propone
+  const note = lista().filter(it => istanzaADER(it) === istanza);
+  const totRate = (note.find(it => it.totaleRatePiano) || {}).totaleRatePiano || '';
+  const presenti = new Set(note.map(it => it.numeroRata));
+  const mancanti = totRate ? Array.from({ length: totRate }, (_, i) => i + 1).filter(n => !presenti.has(n)) : [];
+  const suggerita = mancanti.length === 1 ? `${mancanti[0]}/${totRate}` : '';
+  const r = (prompt('Numero di rata e totale (es. 3/84):', suggerita) || '').match(/(\d+)\s*\/\s*(\d+)/);
   if (!r) return null;
   const nr = Number(r[1]), tot = Number(r[2]);
   const pianoNome = `ADER · Istanza n. ${istanza}`;

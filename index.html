@@ -2881,12 +2881,19 @@ async function creaRataDaQuietanza(q) {
   }
   if (!istanza) istanza = (prompt('Numero di istanza ADER (es. 569076):') || '').replace(/\D/g, '');
   if (!istanza) return null;
-  // Rata suggerita: se per l'istanza manca una sola rata tra quelle note, la propone
+  // Rata suggerita: tra le rate mancanti dell'istanza, quella più vicina alla data di pagamento.
+  // Parte dalla rata nota con scadenza più vicina alla data di pagamento e sceglie il numero mancante più vicino.
   const note = lista().filter(it => istanzaADER(it) === istanza);
   const totRate = (note.find(it => it.totaleRatePiano) || {}).totaleRatePiano || '';
   const presenti = new Set(note.map(it => it.numeroRata));
   const mancanti = totRate ? Array.from({ length: totRate }, (_, i) => i + 1).filter(n => !presenti.has(n)) : [];
-  const suggerita = mancanti.length === 1 ? `${mancanti[0]}/${totRate}` : '';
+  const dataRif = new Date(q.dataPagamento).getTime();
+  const conData = note.filter(it => it.numeroRata && it.scadenza);
+  const piuVicinaData = conData.reduce((best, it) => (!best || Math.abs(new Date(it.scadenza).getTime() - dataRif) < Math.abs(new Date(best.scadenza).getTime() - dataRif)) ? it : best, null);
+  const ancora = piuVicinaData ? piuVicinaData.numeroRata : 0;
+  const suggerita = mancanti.length
+    ? `${mancanti.reduce((b, n) => Math.abs(n - ancora) < Math.abs(b - ancora) ? n : b, mancanti[0])}/${totRate}`
+    : '';
   const r = (prompt('Numero di rata e totale (es. 3/84):', suggerita) || '').match(/(\d+)\s*\/\s*(\d+)/);
   if (!r) return null;
   const nr = Number(r[1]), tot = Number(r[2]);

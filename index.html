@@ -582,8 +582,8 @@
           <div class="drop" id="dropQuietanza">
             <div style="font-size:2rem;">✅</div>
             <b>Seleziona la quietanza PagoPA</b>
-            <small>Riconosce la rata dal codice avviso, propone data e banca, e archivia la quietanza nella rata.</small>
-            <input type="file" id="quietanzaFile" accept=".pdf" hidden>
+            <small>Riconosce la rata dal codice avviso, propone data e banca, e archivia la quietanza nella rata. Anche da foto: in quel caso legge i dati con l'IA.</small>
+            <input type="file" id="quietanzaFile" accept="image/*,.pdf" hidden>
           </div>
           <div id="statusQuietanza" class="hint" style="font-weight:600;"></div>
         </div>
@@ -2834,6 +2834,38 @@ $('importModuloFile').addEventListener('change', async e => {
   }
 });
 
+// Quietanza da foto (o PDF senza testo): l'IA legge i dati e restituisce lo stesso formato di parseQuietanza
+async function leggiQuietanzaIA(file) {
+  if (!aiKey()) throw new Error('Manca la chiave API: inseriscila in "Gestione".');
+  const fd = await preparaFile(file, 1);
+  const prompt = `Questa è una quietanza di pagamento PagoPA italiana (può essere una foto). Estrai:
+"avviso": codice avviso, 18-20 cifre (es. 180014...);
+"iuv": ID univoco versamento, se presente, altrimenti null;
+"importo": importo pagato come numero con punto decimale;
+"dataPagamento": data di pagamento in formato YYYY-MM-DD;
+"psp": nome del prestatore di servizi di pagamento o della banca di addebito;
+"idTransazione": ID transazione, se presente, altrimenti null.
+Rispondi SOLO con JSON: {"avviso":"...","iuv":"...","importo":123.45,"dataPagamento":"YYYY-MM-DD","psp":"...","idTransazione":"..."}. Usa null per i dati mancanti.`;
+  const info = await chiamaGemini(fd, prompt);
+  return {
+    avviso: String(info.avviso || '').replace(/\D/g, ''),
+    iuv: String(info.iuv || '').replace(/\D/g, ''),
+    importo: parseValore(info.importo),
+    dataPagamento: /^\d{4}-\d{2}-\d{2}$/.test(info.dataPagamento || '') ? info.dataPagamento : '',
+    idTransazione: String(info.idTransazione || ''),
+    psp: String(info.psp || ''),
+    stato: '', ente: false
+  };
+}
+// Foto della quietanza convertita in PDF leggero per l'archivio (stessi limiti dei PDF)
+async function immagineQuietanzaB64(file) {
+  for (const [lato, q] of [[1600, 0.75], [1200, 0.6], [1000, 0.5]]) {
+    const blob = await immagineInPdf(file, lato, q);
+    if (blob && blob.size <= PDF_MAX_BYTES) return fileToBase64(blob);
+  }
+  return null;
+}
+
 // Quietanza ADER senza rata nell'app: chiede istanza e numero di rata, crea la rata (ancora da pagare) e la restituisce.
 // Il pagamento e l'archiviazione della quietanza proseguono nel flusso normale.
 async function creaRataDaQuietanza(q) {
@@ -2875,10 +2907,13 @@ $('quietanzaFile').addEventListener('change', async e => {
   e.target.value = '';
   if (!file) return;
   const st = $('statusQuietanza');
-  if (typeof pdfjsLib === 'undefined') { st.textContent = '❌ Libreria PDF non caricata. Ricarica la pagina.'; return; }
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf && typeof pdfjsLib === 'undefined') { st.textContent = '❌ Libreria PDF non caricata. Ricarica la pagina.'; return; }
   st.textContent = '⏳ Lettura della quietanza in corso…';
   try {
-    const q = parseQuietanza(await leggiTestoPdf(file));
+    // PDF con testo: lettura diretta. Foto o PDF senza codice avviso leggibile: lettura con l'IA
+    let q = isPdf ? parseQuietanza(await leggiTestoPdf(file)) : null;
+    if (!q || (!q.avviso && !q.iuv)) q = await leggiQuietanzaIA(file);
     if (!q.avviso && !q.iuv) { st.textContent = '❌ Codice avviso non trovato: non sembra una quietanza PagoPA.'; return; }
     if (!q.importo || !q.dataPagamento) { st.textContent = '❌ Importo o data di pagamento non leggibili in questa quietanza.'; return; }
     let it = rataPerAvviso(q.avviso, q.iuv);
@@ -2888,12 +2923,16 @@ $('quietanzaFile').addEventListener('change', async e => {
       if (!it) { st.textContent = 'Operazione annullata: nessuna rata creata.'; return; }
     }
     if (!it) { st.textContent = `❌ Nessuna rata con codice avviso ${q.avviso}. Importa prima il modulo di pagamento.`; return; }
-    let daArchiviare = file.size <= PDF_MAX_BYTES ? file : null;
-    if (!daArchiviare) {
-      st.textContent = '⏳ PDF pesante: lo alleggerisco per l\'archivio…';
-      daArchiviare = await alleggeriscPdf(file);
+    let pdfB64 = null;
+    if (!isPdf) pdfB64 = await immagineQuietanzaB64(file);
+    else {
+      let daArchiviare = file.size <= PDF_MAX_BYTES ? file : null;
+      if (!daArchiviare) {
+        st.textContent = '⏳ PDF pesante: lo alleggerisco per l\'archivio…';
+        daArchiviare = await alleggeriscPdf(file);
+      }
+      pdfB64 = daArchiviare ? await fileToBase64(daArchiviare) : null;
     }
-    const pdfB64 = daArchiviare ? await fileToBase64(daArchiviare) : null;
     apriPagamento([it.id]);
     ricevutaPendente = {
       avviso: q.avviso, iuv: q.iuv, idTransazione: q.idTransazione, psp: q.psp,

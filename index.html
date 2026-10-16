@@ -602,7 +602,7 @@
     <!-- ======== GESTIONE ======== -->
     <section id="view-archivio" hidden>
       <div class="card">
-        <div class="card-h"><h3>Archivio documenti</h3></div>
+        <div class="card-h"><h3>Archivio documenti</h3><button class="btn btn-ghost" id="btnEntiArch" type="button">Assegna ente ADER</button></div>
         <input type="search" id="archCerca" placeholder="Cerca per piano, rata, banca, codice avviso…" maxlength="100" style="width:100%;">
         <p id="archInfo" class="hint"></p>
         <div id="archLista"></div>
@@ -2982,15 +2982,31 @@ function istanzaADER(it) {
   const m = String(it.pianoNome || '').match(/Istanza n\.\s*(\d+)/i);
   return m ? m[1] : '';
 }
-// Cartella dell'archivio per documento: ADER per istanza di rateizzazione, mutui per banca e numero, altrimenti per ente
+// Riconosce un record ADER dal piano o dal codice avviso PagoPA (prefisso 180014)
+function eADER(it) {
+  const avviso = String(it.codiceAvviso || (it.ricevuta && it.ricevuta.avviso) || '');
+  return !!istanzaADER(it) || /^180014/.test(avviso);
+}
+// Targa italiana (es. AB123CD) dal riferimento, senza spazi e in maiuscolo
+function targaArchivio(it) {
+  const m = String(it.riferimento || '').match(/[A-Z]{2}\s?\d{3}\s?[A-Z]{2}/i);
+  return m ? m[0].replace(/\s/g, '').toUpperCase() : '';
+}
+// Cartella dell'archivio per documento:
+// ADER per istanza di rateizzazione; mutui per banca e numero; polizze per compagnia e targa; bollo per targa; altrimenti per ente
 function cartellaArchivio(it) {
   const istanza = istanzaADER(it);
-  const avviso = String(it.codiceAvviso || (it.ricevuta && it.ricevuta.avviso) || '');
   if (istanza) return `ADER · Istanza n. ${istanza}`;
-  if (/^180014/.test(avviso)) return 'ADER';
+  if (eADER(it)) return 'ADER';
   if (isMutuo(it)) {
     const n = (String(it.pianoNome || '').match(/(\d{5,})\s*$/) || [])[1];
     if (n) return `${nomeCartella(it.banca)} · Mutuo ${n}`;
+  }
+  const targa = targaArchivio(it);
+  if (it.categoria === 'Bollo Auto') return targa ? `Bollo auto · ${targa}` : 'Bollo auto';
+  if (it.categoria === 'Assicurazione') {
+    const compagnia = nomeCartella(it.ente);
+    return targa ? `${compagnia} · ${targa}` : compagnia;
   }
   return nomeCartella(it.ente);
 }
@@ -3282,6 +3298,17 @@ $('btnMigra').addEventListener('click', async () => {
     arr.forEach(r => { const it = normalizza(r); upd[it.id] = conMeta(it); });
     await scrivi(upd, `Migrate ${arr.length} voci`);
   } catch (e) { alert('Impossibile leggere il vecchio archivio: ' + e.message); }
+});
+
+// Assegna ente "ADER" ai record ADER che non hanno ente. Scrive solo dopo conferma.
+$('btnEntiArch').addEventListener('click', async () => {
+  const daAggiornare = Object.entries(S.items || {}).filter(([, it]) => !it.ente && eADER(it));
+  if (!daAggiornare.length) { alert('Nessun record ADER senza ente da aggiornare.'); return; }
+  const esempi = daAggiornare.slice(0, 5).map(([, it]) => `· ${etichettaRata(it)} ${it.pianoNome || ''}`.trim()).join('\n');
+  if (!confirm(`Assegno l'ente ADER a ${daAggiornare.length} record:\n\n${esempi}${daAggiornare.length > 5 ? '\n…' : ''}\n\nConfermi?`)) return;
+  const upd = {};
+  daAggiornare.forEach(([id, it]) => { upd[id] = conMeta(Object.assign({}, it, { ente: 'ADER' })); });
+  if (await scrivi(upd, `Ente ADER assegnato a ${daAggiornare.length} record`)) renderArchivio();
 });
 
 $('btnCsv').addEventListener('click', () => {

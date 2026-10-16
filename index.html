@@ -2977,6 +2977,23 @@ function creaZip(file) {
   parti.push(new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(centrale.length), ...u16(centrale.length), ...u32(lunghezzaCentrale), ...u32(inizioCentrale), ...u16(0)]));
   return new Blob(parti, { type: 'application/zip' });
 }
+// Numero di istanza ADER, letto dal piano (es. "Doc. 01420260013605520 - Istanza n. 569076 del ...")
+function istanzaADER(it) {
+  const m = String(it.pianoNome || '').match(/Istanza n\.\s*(\d+)/i);
+  return m ? m[1] : '';
+}
+// Cartella dell'archivio per documento: ADER per istanza di rateizzazione, mutui per banca e numero, altrimenti per ente
+function cartellaArchivio(it) {
+  const istanza = istanzaADER(it);
+  const avviso = String(it.codiceAvviso || (it.ricevuta && it.ricevuta.avviso) || '');
+  if (istanza) return `ADER · Istanza n. ${istanza}`;
+  if (/^180014/.test(avviso)) return 'ADER';
+  if (isMutuo(it)) {
+    const n = (String(it.pianoNome || '').match(/(\d{5,})\s*$/) || [])[1];
+    if (n) return `${nomeCartella(it.banca)} · Mutuo ${n}`;
+  }
+  return nomeCartella(it.ente);
+}
 let gruppiArch = []; // per ogni sezione mostrata: { nome, indici } con gli indici in archDocs
 function renderArchivio() {
   archDocs = documentiArchivio();
@@ -2990,7 +3007,7 @@ function renderArchivio() {
   const gruppi = new Map();
   visibili.forEach(({ d, i }) => {
     const anno = String(d.data || '').slice(0, 4) || 'senza data';
-    const cart = nomeCartella(d.it.ente);
+    const cart = cartellaArchivio(d.it);
     const k = cart + '|' + anno;
     if (!gruppi.has(k)) gruppi.set(k, { cart, anno, righe: [] });
     gruppi.get(k).righe.push({ d, i });

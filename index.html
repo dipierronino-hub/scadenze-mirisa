@@ -122,6 +122,17 @@
     .stack { display: flex; flex-direction: column; gap: 8px; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .hint { font-size: .8rem; color: var(--muted); margin: 8px 0 0; }
+    /* ---------- PAGAMENTI CON CARTA ---------- */
+    .carta-mese { display: flex; align-items: center; gap: 8px; }
+    .carta-mese b { min-width: 9em; text-align: center; text-transform: capitalize; }
+    .carta-riga { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+    .carta-riga:first-child { border-top: 0; }
+    .carta-av { width: 38px; height: 38px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; background: var(--primary-soft); color: var(--primary); }
+    .carta-txt { flex: 1 1 auto; min-width: 0; }
+    .carta-txt b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .carta-txt small { color: var(--muted); }
+    .carta-imp { font-weight: 700; white-space: nowrap; }
+    .carta-imp.rimborso { color: var(--green); }
 
     /* ---------- KPI ---------- */
     .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -318,6 +329,7 @@
         <button data-view="riepiloghi"><span>📊</span>Riepiloghi</button>
         <button data-view="aggiungi"><span>➕</span>Aggiungi</button>
         <button data-view="archivio"><span>🗄️</span>Archivio</button>
+        <button data-view="carta"><span>💳</span>Carta</button>
         <button data-view="gestione"><span>⚙️</span>Gestione</button>
       </nav>
       <div class="top-right">
@@ -609,6 +621,34 @@
       </div>
     </section>
 
+    <!-- ======== PAGAMENTI CON CARTA ======== -->
+    <section id="view-carta" hidden>
+      <div class="kpis">
+        <div class="kpi" style="--k: var(--blue);">
+          <div class="t">Speso nel mese</div>
+          <div class="v num" id="kCartaTot">€ 0,00</div>
+          <div class="s" id="kCartaTotSub">-</div>
+        </div>
+        <div class="kpi" style="--k: var(--green);">
+          <div class="t">Rimborsi</div>
+          <div class="v num" id="kCartaRimb">€ 0,00</div>
+          <div class="s">già sottratti dal totale</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h">
+          <h3>Pagamenti con carta</h3>
+          <div class="carta-mese">
+            <button class="ib" type="button" id="cartaPrec" aria-label="Mese precedente">‹</button>
+            <b id="cartaMese"></b>
+            <button class="ib" type="button" id="cartaSucc" aria-label="Mese successivo">›</button>
+          </div>
+        </div>
+        <div id="cartaLista"></div>
+        <p class="hint">Arrivano da soli dall'app Pagamenti sul telefono, leggendo le notifiche della banca. Qui finiscono solo le app bancarie impostate su "Mirisa". Sono separati dalle scadenze.</p>
+      </div>
+    </section>
+
     <section id="view-gestione" hidden>
       <div class="card">
         <div class="card-h"><h3>Motore intelligenza artificiale</h3></div>
@@ -825,8 +865,10 @@ if (typeof pdfjsLib !== 'undefined') {
 // ---------- Stato (solo in memoria) ----------
 const S = {
   items: {}, piani: {}, piano: 'TUTTI', stato: 'aperte', cerca: '',
-  giorni: 15, sel: new Set(), vista: 'scadenze', periodo: '12'
+  giorni: 15, sel: new Set(), vista: 'scadenze', periodo: '12',
+  carta: {}, cartaErr: '', cartaMese: oggiIso().slice(0, 7)
 };
+let cartaRef = null;
 let dataRef = null, connRef = null, ultimoUndo = null, toastTimer = null, idleTimer = null;
 const charts = {};
 
@@ -1275,6 +1317,10 @@ function apriApp(user) {
   dataRef = db.ref(PATH);
   dataRef.on('value', snap => { S.items = snap.val() || {}; render(); },
     err => { alert('Lettura dati negata: ' + err.message); auth.signOut(); });
+  // Pagamenti con carta Mirisa scritti dall'app Android: solo lettura (e cancellazione dei doppioni).
+  cartaRef = db.ref('pagamenti_carta');
+  cartaRef.on('value', snap => { S.carta = snap.val() || {}; S.cartaErr = ''; if (S.vista === 'carta') renderCarta(); },
+    err => { S.carta = {}; S.cartaErr = err.message; if (S.vista === 'carta') renderCarta(); });
   connRef = db.ref('.info/connected');
   connRef.on('value', s => {
     const on = s.val() === true;
@@ -1290,12 +1336,14 @@ function apriApp(user) {
 function chiudiApp() {
   if (dataRef) dataRef.off();
   if (connRef) connRef.off();
-  dataRef = connRef = null;
+  if (cartaRef) cartaRef.off();
+  dataRef = connRef = cartaRef = null;
+  S.carta = {}; S.cartaErr = '';
   appAperta = false; staccaAssegni(); staccaPaghe(); aggiornaCollegamenti();
   S.items = {}; S.piani = {}; S.sel.clear(); S.piano = 'TUTTI';
   clearTimeout(idleTimer);
   Object.keys(charts).forEach(k => { charts[k].destroy(); delete charts[k]; });
-  ['tbody', 'cards', 'promemoria', 'tbCartelle', 'tbAnni', 'tbBanche'].forEach(id => { $(id).innerHTML = ''; });
+  ['tbody', 'cards', 'promemoria', 'tbCartelle', 'tbAnni', 'tbBanche', 'cartaLista'].forEach(id => { $(id).innerHTML = ''; });
   document.querySelectorAll('.modal.open').forEach(m => chiudiModal(m.id));
   $('bulkBar').hidden = true;
   $('app').hidden = true;
@@ -2217,12 +2265,73 @@ function renderRiepiloghi() {
 }
 
 // ==============================================================
+// PAGAMENTI CON CARTA (dall'app Android "Pagamenti", contesto Mirisa)
+// ==============================================================
+const BANCHE_CARTA = {
+  'com.latuabancaperandroid': 'Intesa Sanpaolo', 'com.unicredit': 'UniCredit',
+  'posteitaliane.posteapp.appbpol': 'BancoPosta', 'posteitaliane.posteapp.apppostepay': 'Postepay',
+  'com.fineco.it': 'Fineco', 'com.mediolanum.android.fullbanca': 'Banca Mediolanum',
+  'com.revolut.revolut': 'Revolut', 'de.number26.android': 'N26', 'it.hype.app': 'Hype',
+  'com.google.android.apps.walletnfcrel': 'Google Wallet', 'com.samsung.android.spay': 'Samsung Wallet'
+};
+function listaCarta() {
+  return Object.values(S.carta || {})
+    .filter(v => v && typeof v === 'object' && Number.isFinite(v.importoCent) && Number.isFinite(v.dataOra))
+    .sort((a, b) => b.dataOra - a.dataOra);
+}
+function meseDi(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function cambiaMeseCarta(n) {
+  const [y, m] = S.cartaMese.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  S.cartaMese = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  renderCarta();
+}
+function renderCarta() {
+  const [y, m] = S.cartaMese.split('-').map(Number);
+  $('cartaMese').textContent = new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  $('cartaSucc').disabled = S.cartaMese >= oggiIso().slice(0, 7);
+  const voci = listaCarta().filter(v => meseDi(v.dataOra) === S.cartaMese);
+  // Totale come nell'app: solo euro, rimborsi sottratti.
+  const eur = voci.filter(v => v.valuta === 'EUR');
+  const rimb = eur.filter(v => v.tipo === 'RIMBORSO').reduce((t, v) => t + v.importoCent, 0);
+  const spesi = eur.filter(v => v.tipo !== 'RIMBORSO').reduce((t, v) => t + v.importoCent, 0);
+  $('kCartaTot').textContent = formatEuro((spesi - rimb) / 100);
+  $('kCartaTotSub').textContent = `${voci.length} ${voci.length === 1 ? 'operazione' : 'operazioni'}`;
+  $('kCartaRimb').textContent = formatEuro(rimb / 100);
+  if (S.cartaErr) { $('cartaLista').innerHTML = `<p class="hint">Pagamenti non leggibili (${esc(S.cartaErr)}). Servono le regole del database per i pagamenti con carta.</p>`; return; }
+  if (!voci.length) { $('cartaLista').innerHTML = '<p class="hint">Nessun pagamento con carta in questo mese.</p>'; return; }
+  $('cartaLista').innerHTML = voci.map(v => {
+    const nome = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievo' : 'Esercente sconosciuto');
+    const d = new Date(v.dataOra);
+    const quando = d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    const tipo = v.tipo === 'RIMBORSO' ? ' · rimborso' : (v.tipo === 'PRELIEVO' ? ' · prelievo' : '');
+    const segno = v.tipo === 'RIMBORSO' ? '+' : '-';
+    const importo = (v.importoCent / 100).toLocaleString('it-IT', { style: 'currency', currency: /^[A-Z]{3}$/.test(v.valuta) ? v.valuta : 'EUR' });
+    return `<div class="carta-riga"><div class="carta-av">${esc(nome.trim().charAt(0).toUpperCase() || '?')}</div>` +
+      `<div class="carta-txt"><b>${esc(nome)}</b><small>${esc(quando)} · ${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small></div>` +
+      `<div class="carta-imp${v.tipo === 'RIMBORSO' ? ' rimborso' : ''}">${segno}${esc(importo)}</div>` +
+      `<button class="ib" type="button" data-carta-del="${esc(v.id)}" title="Elimina" aria-label="Elimina pagamento">🗑️</button></div>`;
+  }).join('');
+}
+$('cartaPrec').addEventListener('click', () => cambiaMeseCarta(-1));
+$('cartaSucc').addEventListener('click', () => cambiaMeseCarta(1));
+$('cartaLista').addEventListener('click', async e => {
+  const b = e.target.closest('[data-carta-del]');
+  if (!b || !cartaRef) return;
+  const v = (S.carta || {})[b.dataset.cartaDel];
+  if (!v || !confirm(`Eliminare il pagamento di ${formatEuro(v.importoCent / 100)}${v.esercente ? ' da ' + v.esercente : ''}?`)) return;
+  try { await cartaRef.child(b.dataset.cartaDel).remove(); mostraToast('🗑️ Pagamento eliminato'); }
+  catch (err) { alert('Eliminazione non riuscita: ' + err.message); }
+});
+
+// ==============================================================
 // NAVIGAZIONE ED EVENTI
 // ==============================================================
 function vai(v) {
   S.vista = v;
-  ['quadro', 'scadenze', 'riepiloghi', 'aggiungi', 'archivio', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
+  ['quadro', 'scadenze', 'riepiloghi', 'aggiungi', 'archivio', 'carta', 'gestione'].forEach(x => { $('view-' + x).hidden = x !== v; });
   if (v === 'archivio') renderArchivio();
+  if (v === 'carta') renderCarta();
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   $('contextBar').hidden = !(v === 'scadenze' || v === 'riepiloghi' || v === 'quadro');
   $('bulkBar').style.visibility = v === 'scadenze' ? 'visible' : 'hidden';

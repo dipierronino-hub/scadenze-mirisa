@@ -133,6 +133,16 @@
     .carta-txt small { color: var(--muted); }
     .carta-imp { font-weight: 700; white-space: nowrap; }
     .carta-imp.rimborso { color: var(--green); }
+    .carta-modo { margin: 4px 0 10px; }
+    .carta-cart { border-top: 1px solid var(--border); }
+    .carta-cart:first-child { border-top: 0; }
+    .carta-cart > summary { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; list-style: none; }
+    .carta-cart > summary::-webkit-details-marker { display: none; }
+    .carta-cart > summary .carta-av { border-radius: 10px; }
+    .carta-cart > summary::after { content: '›'; color: var(--muted); font-size: 1.3rem; transition: transform .15s; }
+    .carta-cart[open] > summary::after { transform: rotate(90deg); }
+    .carta-cart .carta-dentro { padding-left: 50px; }
+    .carta-cart .carta-dentro .carta-riga { border-top: 1px dashed var(--border); }
 
     /* ---------- KPI ---------- */
     .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -643,6 +653,11 @@
             <b id="cartaMese"></b>
             <button class="ib" type="button" id="cartaSucc" aria-label="Mese successivo">›</button>
           </div>
+        </div>
+        <div class="chips carta-modo" role="group" aria-label="Come mostrare i pagamenti">
+          <button class="chip" type="button" data-carta-modo="elenco">Elenco</button>
+          <button class="chip" type="button" data-carta-modo="cartelle">📁 Per esercente</button>
+          <button class="chip" type="button" data-carta-modo="sempre">📁 Tutti i mesi</button>
         </div>
         <div id="cartaLista"></div>
         <p class="hint">Arrivano da soli dall'app Pagamenti sul telefono, leggendo le notifiche della banca. Qui finiscono solo le app bancarie impostate su "Mirisa". Sono separati dalle scadenze.</p>
@@ -2287,11 +2302,60 @@ function cambiaMeseCarta(n) {
   S.cartaMese = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   renderCarta();
 }
+// Modo di visualizzazione: elenco, cartelle per esercente del mese, cartelle di tutti i mesi.
+// Preferenza solo di questo browser.
+let cartaModo = 'elenco';
+try { cartaModo = localStorage.getItem('cartaModo') || 'elenco'; } catch (e) { /* storage non disponibile */ }
+// Chiave di raggruppamento: maiuscole, accenti, punteggiatura e spazi doppi non contano.
+function chiaveEsercente(v) {
+  if (!v.esercente) return v.tipo === 'PRELIEVO' ? '~prelievi' : '~sconosciuto';
+  return v.esercente.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || '~sconosciuto';
+}
+function nettoCent(voci) {
+  return voci.filter(v => v.valuta === 'EUR').reduce((t, v) => t + (v.tipo === 'RIMBORSO' ? -v.importoCent : v.importoCent), 0);
+}
+function rigaCarta(v) {
+  const nome = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievo' : 'Esercente sconosciuto');
+  const d = new Date(v.dataOra);
+  const quando = d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: cartaModo === 'sempre' ? 'numeric' : undefined }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const tipo = v.tipo === 'RIMBORSO' ? ' · rimborso' : (v.tipo === 'PRELIEVO' ? ' · prelievo' : '');
+  const segno = v.tipo === 'RIMBORSO' ? '+' : '-';
+  const importo = (v.importoCent / 100).toLocaleString('it-IT', { style: 'currency', currency: /^[A-Z]{3}$/.test(v.valuta) ? v.valuta : 'EUR' });
+  const inCartella = cartaModo !== 'elenco';
+  return `<div class="carta-riga">${inCartella ? '' : `<div class="carta-av">${esc(nome.trim().charAt(0).toUpperCase() || '?')}</div>`}` +
+    `<div class="carta-txt">${inCartella ? `<b>${esc(quando)}</b><small>${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small>` : `<b>${esc(nome)}</b><small>${esc(quando)} · ${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small>`}</div>` +
+    `<div class="carta-imp${v.tipo === 'RIMBORSO' ? ' rimborso' : ''}">${segno}${esc(importo)}</div>` +
+    `<button class="ib" type="button" data-carta-del="${esc(v.id)}" title="Elimina" aria-label="Elimina pagamento">🗑️</button></div>`;
+}
+// Una cartella per esercente, le più costose in alto; le cartelle aperte restano aperte dopo un aggiornamento.
+function cartelleCarta(voci) {
+  const aperte = new Set([...document.querySelectorAll('#cartaLista details[open]')].map(d => d.dataset.chiave));
+  const gruppi = new Map();
+  voci.forEach(v => { const k = chiaveEsercente(v); if (!gruppi.has(k)) gruppi.set(k, []); gruppi.get(k).push(v); });
+  return [...gruppi.entries()]
+    .map(([k, vv]) => ({ k, vv, netto: nettoCent(vv) }))
+    .sort((a, b) => b.netto - a.netto || b.vv.length - a.vv.length)
+    .map(({ k, vv, netto }) => {
+      // Nome mostrato: la grafia più frequente (a parità, la più recente).
+      const conta = {};
+      vv.forEach(v => { const n = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievi' : 'Esercente sconosciuto'); conta[n] = (conta[n] || 0) + 1; });
+      const nome = Object.keys(conta).reduce((a, b) => conta[b] > conta[a] ? b : a);
+      return `<details class="carta-cart" data-chiave="${esc(k)}"${aperte.has(k) ? ' open' : ''}><summary>` +
+        `<div class="carta-av">📁</div>` +
+        `<div class="carta-txt"><b>${esc(nome)}</b><small>${vv.length} ${vv.length === 1 ? 'pagamento' : 'pagamenti'}</small></div>` +
+        `<div class="carta-imp${netto < 0 ? ' rimborso' : ''}">${netto < 0 ? '+' : '-'}${esc(formatEuro(Math.abs(netto) / 100))}</div>` +
+        `</summary><div class="carta-dentro">${vv.map(rigaCarta).join('')}</div></details>`;
+    }).join('');
+}
 function renderCarta() {
   const [y, m] = S.cartaMese.split('-').map(Number);
-  $('cartaMese').textContent = new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
-  $('cartaSucc').disabled = S.cartaMese >= oggiIso().slice(0, 7);
-  const voci = listaCarta().filter(v => meseDi(v.dataOra) === S.cartaMese);
+  const sempre = cartaModo === 'sempre';
+  document.querySelectorAll('[data-carta-modo]').forEach(b => b.classList.toggle('active', b.dataset.cartaModo === cartaModo));
+  $('cartaMese').textContent = sempre ? 'Tutto' : new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  $('cartaPrec').disabled = sempre;
+  $('cartaSucc').disabled = sempre || S.cartaMese >= oggiIso().slice(0, 7);
+  $('kCartaTot').previousElementSibling.textContent = sempre ? 'Speso in totale' : 'Speso nel mese';
+  const voci = listaCarta().filter(v => sempre || meseDi(v.dataOra) === S.cartaMese);
   // Totale come nell'app: solo euro, rimborsi sottratti.
   const eur = voci.filter(v => v.valuta === 'EUR');
   const rimb = eur.filter(v => v.tipo === 'RIMBORSO').reduce((t, v) => t + v.importoCent, 0);
@@ -2300,20 +2364,14 @@ function renderCarta() {
   $('kCartaTotSub').textContent = `${voci.length} ${voci.length === 1 ? 'operazione' : 'operazioni'}`;
   $('kCartaRimb').textContent = formatEuro(rimb / 100);
   if (S.cartaErr) { $('cartaLista').innerHTML = `<p class="hint">Pagamenti non leggibili (${esc(S.cartaErr)}). Servono le regole del database per i pagamenti con carta.</p>`; return; }
-  if (!voci.length) { $('cartaLista').innerHTML = '<p class="hint">Nessun pagamento con carta in questo mese.</p>'; return; }
-  $('cartaLista').innerHTML = voci.map(v => {
-    const nome = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievo' : 'Esercente sconosciuto');
-    const d = new Date(v.dataOra);
-    const quando = d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    const tipo = v.tipo === 'RIMBORSO' ? ' · rimborso' : (v.tipo === 'PRELIEVO' ? ' · prelievo' : '');
-    const segno = v.tipo === 'RIMBORSO' ? '+' : '-';
-    const importo = (v.importoCent / 100).toLocaleString('it-IT', { style: 'currency', currency: /^[A-Z]{3}$/.test(v.valuta) ? v.valuta : 'EUR' });
-    return `<div class="carta-riga"><div class="carta-av">${esc(nome.trim().charAt(0).toUpperCase() || '?')}</div>` +
-      `<div class="carta-txt"><b>${esc(nome)}</b><small>${esc(quando)} · ${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small></div>` +
-      `<div class="carta-imp${v.tipo === 'RIMBORSO' ? ' rimborso' : ''}">${segno}${esc(importo)}</div>` +
-      `<button class="ib" type="button" data-carta-del="${esc(v.id)}" title="Elimina" aria-label="Elimina pagamento">🗑️</button></div>`;
-  }).join('');
+  if (!voci.length) { $('cartaLista').innerHTML = `<p class="hint">Nessun pagamento con carta ${sempre ? 'registrato' : 'in questo mese'}.</p>`; return; }
+  $('cartaLista').innerHTML = cartaModo === 'elenco' ? voci.map(rigaCarta).join('') : cartelleCarta(voci);
 }
+document.querySelectorAll('[data-carta-modo]').forEach(b => b.addEventListener('click', () => {
+  cartaModo = b.dataset.cartaModo;
+  try { localStorage.setItem('cartaModo', cartaModo); } catch (e) { /* storage non disponibile */ }
+  renderCarta();
+}));
 $('cartaPrec').addEventListener('click', () => cambiaMeseCarta(-1));
 $('cartaSucc').addEventListener('click', () => cambiaMeseCarta(1));
 $('cartaLista').addEventListener('click', async e => {

@@ -644,6 +644,11 @@
           <div class="v num" id="kCartaRimb">€ 0,00</div>
           <div class="s">già sottratti dal totale</div>
         </div>
+        <div class="kpi" style="--k: var(--primary);">
+          <div class="t">Dare / Avere</div>
+          <div class="v num" id="kCartaSaldo">€ 0,00</div>
+          <div class="s" id="kCartaDA">-</div>
+        </div>
       </div>
       <div class="card">
         <div class="card-h">
@@ -2308,8 +2313,8 @@ let cartaModo = 'elenco';
 try { cartaModo = localStorage.getItem('cartaModo') || 'elenco'; } catch (e) { /* storage non disponibile */ }
 // Chiave di raggruppamento: maiuscole, accenti, punteggiatura e spazi doppi non contano.
 // Soldi che entrano (rimborsi e bonifici ricevuti) e bonifici, che non sono spese con carta.
-const ENTRATA = v => v.tipo === 'RIMBORSO' || v.tipo === 'BONIFICO_ENTRATA';
-const BONIFICO = v => v.tipo === 'BONIFICO_USCITA' || v.tipo === 'BONIFICO_ENTRATA';
+const ENTRATA = v => v.tipo === 'RIMBORSO' || v.tipo === 'BONIFICO_ENTRATA' || v.tipo === 'VERSAMENTO';
+const BONIFICO = v => v.tipo === 'BONIFICO_USCITA' || v.tipo === 'BONIFICO_ENTRATA' || v.tipo === 'VERSAMENTO';
 function chiaveEsercente(v) {
   if (!v.esercente) return v.tipo === 'PRELIEVO' ? '~prelievi' : '~sconosciuto';
   return v.esercente.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || '~sconosciuto';
@@ -2321,7 +2326,7 @@ function rigaCarta(v) {
   const nome = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievo' : 'Esercente sconosciuto');
   const d = new Date(v.dataOra);
   const quando = d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: cartaModo === 'sempre' ? 'numeric' : undefined }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  const tipo = { RIMBORSO: ' · rimborso', PRELIEVO: ' · prelievo', BONIFICO_USCITA: ' · bonifico in uscita', BONIFICO_ENTRATA: ' · bonifico in entrata' }[v.tipo] || '';
+  const tipo = { RIMBORSO: ' · rimborso', PRELIEVO: ' · prelievo', BONIFICO_USCITA: ' · bonifico in uscita', BONIFICO_ENTRATA: ' · bonifico in entrata', VERSAMENTO: ' · versamento' }[v.tipo] || '';
   const segno = ENTRATA(v) ? '+' : '-';
   const importo = (v.importoCent / 100).toLocaleString('it-IT', { style: 'currency', currency: /^[A-Z]{3}$/.test(v.valuta) ? v.valuta : 'EUR' });
   const inCartella = cartaModo !== 'elenco';
@@ -2367,6 +2372,11 @@ function renderCarta() {
   $('kCartaTot').textContent = formatEuro((spesi - rimb) / 100);
   $('kCartaTotSub').textContent = `${voci.length} ${voci.length === 1 ? 'operazione' : 'operazioni'}`;
   $('kCartaRimb').textContent = formatEuro(rimb / 100);
+  // Dare (uscite) e avere (entrate) con tutti i movimenti: carta, prelievi, bonifici, versamenti.
+  const avere = eur.filter(ENTRATA).reduce((t, v) => t + v.importoCent, 0);
+  const dare = eur.filter(v => !ENTRATA(v)).reduce((t, v) => t + v.importoCent, 0);
+  $('kCartaSaldo').textContent = (avere - dare < 0 ? '-' : '+') + formatEuro(Math.abs(avere - dare) / 100);
+  $('kCartaDA').textContent = `saldo · dare ${formatEuro(dare / 100)} · avere ${formatEuro(avere / 100)}`;
   if (S.cartaErr) { $('cartaLista').innerHTML = `<p class="hint">Pagamenti non leggibili (${esc(S.cartaErr)}). Servono le regole del database per i pagamenti con carta.</p>`; return; }
   if (!voci.length) { $('cartaLista').innerHTML = `<p class="hint">Nessun pagamento con carta ${sempre ? 'registrato' : 'in questo mese'}.</p>`; return; }
   $('cartaLista').innerHTML = cartaModo === 'elenco' ? voci.map(rigaCarta).join('') : cartelleCarta(voci);

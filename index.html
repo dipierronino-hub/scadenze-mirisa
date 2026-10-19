@@ -2307,24 +2307,27 @@ function cambiaMeseCarta(n) {
 let cartaModo = 'elenco';
 try { cartaModo = localStorage.getItem('cartaModo') || 'elenco'; } catch (e) { /* storage non disponibile */ }
 // Chiave di raggruppamento: maiuscole, accenti, punteggiatura e spazi doppi non contano.
+// Soldi che entrano (rimborsi e bonifici ricevuti) e bonifici, che non sono spese con carta.
+const ENTRATA = v => v.tipo === 'RIMBORSO' || v.tipo === 'BONIFICO_ENTRATA';
+const BONIFICO = v => v.tipo === 'BONIFICO_USCITA' || v.tipo === 'BONIFICO_ENTRATA';
 function chiaveEsercente(v) {
   if (!v.esercente) return v.tipo === 'PRELIEVO' ? '~prelievi' : '~sconosciuto';
   return v.esercente.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || '~sconosciuto';
 }
 function nettoCent(voci) {
-  return voci.filter(v => v.valuta === 'EUR').reduce((t, v) => t + (v.tipo === 'RIMBORSO' ? -v.importoCent : v.importoCent), 0);
+  return voci.filter(v => v.valuta === 'EUR').reduce((t, v) => t + (ENTRATA(v) ? -v.importoCent : v.importoCent), 0);
 }
 function rigaCarta(v) {
   const nome = v.esercente || (v.tipo === 'PRELIEVO' ? 'Prelievo' : 'Esercente sconosciuto');
   const d = new Date(v.dataOra);
   const quando = d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: cartaModo === 'sempre' ? 'numeric' : undefined }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  const tipo = v.tipo === 'RIMBORSO' ? ' · rimborso' : (v.tipo === 'PRELIEVO' ? ' · prelievo' : '');
-  const segno = v.tipo === 'RIMBORSO' ? '+' : '-';
+  const tipo = { RIMBORSO: ' · rimborso', PRELIEVO: ' · prelievo', BONIFICO_USCITA: ' · bonifico in uscita', BONIFICO_ENTRATA: ' · bonifico in entrata' }[v.tipo] || '';
+  const segno = ENTRATA(v) ? '+' : '-';
   const importo = (v.importoCent / 100).toLocaleString('it-IT', { style: 'currency', currency: /^[A-Z]{3}$/.test(v.valuta) ? v.valuta : 'EUR' });
   const inCartella = cartaModo !== 'elenco';
   return `<div class="carta-riga">${inCartella ? '' : `<div class="carta-av">${esc(nome.trim().charAt(0).toUpperCase() || '?')}</div>`}` +
     `<div class="carta-txt">${inCartella ? `<b>${esc(quando)}</b><small>${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small>` : `<b>${esc(nome)}</b><small>${esc(quando)} · ${esc(BANCHE_CARTA[v.fonte] || v.fonte || '')}${tipo}</small>`}</div>` +
-    `<div class="carta-imp${v.tipo === 'RIMBORSO' ? ' rimborso' : ''}">${segno}${esc(importo)}</div>` +
+    `<div class="carta-imp${ENTRATA(v) ? ' rimborso' : ''}">${segno}${esc(importo)}</div>` +
     `<button class="ib" type="button" data-carta-del="${esc(v.id)}" title="Elimina" aria-label="Elimina pagamento">🗑️</button></div>`;
 }
 // Una cartella per esercente, le più costose in alto; le cartelle aperte restano aperte dopo un aggiornamento.
@@ -2358,8 +2361,9 @@ function renderCarta() {
   const voci = listaCarta().filter(v => sempre || meseDi(v.dataOra) === S.cartaMese);
   // Totale come nell'app: solo euro, rimborsi sottratti.
   const eur = voci.filter(v => v.valuta === 'EUR');
+  // I bonifici restano fuori dal totale delle spese con carta.
   const rimb = eur.filter(v => v.tipo === 'RIMBORSO').reduce((t, v) => t + v.importoCent, 0);
-  const spesi = eur.filter(v => v.tipo !== 'RIMBORSO').reduce((t, v) => t + v.importoCent, 0);
+  const spesi = eur.filter(v => v.tipo !== 'RIMBORSO' && !BONIFICO(v)).reduce((t, v) => t + v.importoCent, 0);
   $('kCartaTot').textContent = formatEuro((spesi - rimb) / 100);
   $('kCartaTotSub').textContent = `${voci.length} ${voci.length === 1 ? 'operazione' : 'operazioni'}`;
   $('kCartaRimb').textContent = formatEuro(rimb / 100);

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#3f3d3e">
+  <meta name="theme-color" content="#ffffff">
   <title>Scadenzario Generale · Mirisa Ceramiche</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -23,6 +23,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&family=Manrope:wght@400;600;700;800&display=swap">
   <style>
     :root {
       --bg: #f3f5f9; --surface: #ffffff; --surface-2: #f8fafc; --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
@@ -302,6 +305,223 @@
     .kpi-click { cursor: pointer; transition: transform .08s; }
     .kpi-click:hover { transform: translateY(-1px); }
     .kpi-click.attivo { outline: 2px solid var(--k); outline-offset: 2px; }
+    /* ==============================================================
+       TEMA FUTURO (2026-10): solo aspetto grafico, nessuna funzione cambia.
+       Identico su Generale e Personale: cambiano solo --acc-1/--acc-2/--acc-3.
+       Vetro smerigliato, luci al neon, sfondo con aurora che si muove piano.
+       ============================================================== */
+    :root {
+      --bg: #edf2f7; --surface: rgba(255,255,255,.72); --surface-2: rgba(255,255,255,.55); --solid: #ffffff;
+      --text: #0f1a2a; --muted: #586679; --border: rgba(15,30,60,.10);
+      --red: #e11d48; --red-soft: rgba(225,29,72,.12); --amber: #c2410c; --amber-soft: rgba(249,115,22,.14);
+      --blue: #2563eb; --blue-soft: rgba(37,99,235,.12); --green: #059669; --green-soft: rgba(16,185,129,.14);
+      --primary: var(--acc-2); --primary-2: var(--acc-1); --primary-soft: color-mix(in srgb, var(--acc-2) 14%, transparent); --on-primary: #fff;
+      --ink: #0f1a2a; --neon-g: #10e0a0; --neon-y: #ffc53d;
+      --glass-hi: rgba(255,255,255,.9); --glow: .35; --grid: rgba(20,50,90,.06);
+      --shadow: 0 10px 30px -18px rgba(20,40,80,.35);
+      --radius: 20px;
+      --disp: "Unbounded", "Segoe UI", Roboto, sans-serif;
+      --body: "Manrope", -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #050b14; --surface: rgba(255,255,255,.055); --surface-2: rgba(255,255,255,.07); --solid: #0f1b2b;
+        --text: #eef4fb; --muted: #93a3b8; --border: rgba(255,255,255,.10);
+        --red: #ff4d6d; --red-soft: rgba(255,77,109,.16); --amber: #ffa94d; --amber-soft: rgba(255,169,77,.14);
+        --blue: #6ea8ff; --blue-soft: rgba(110,168,255,.14); --green: #34f0b0; --green-soft: rgba(52,240,176,.12);
+        --primary: var(--acc-1); --primary-2: #fff; --primary-soft: color-mix(in srgb, var(--acc-1) 22%, transparent);
+        --glass-hi: rgba(255,255,255,.14); --glow: .75; --grid: rgba(140,190,255,.07);
+        --shadow: 0 18px 40px -20px rgba(0,0,0,.9);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #050b14; --surface: rgba(255,255,255,.055); --surface-2: rgba(255,255,255,.07); --solid: #0f1b2b;
+      --text: #eef4fb; --muted: #93a3b8; --border: rgba(255,255,255,.10);
+      --red: #ff4d6d; --red-soft: rgba(255,77,109,.16); --amber: #ffa94d; --amber-soft: rgba(255,169,77,.14);
+      --blue: #6ea8ff; --blue-soft: rgba(110,168,255,.14); --green: #34f0b0; --green-soft: rgba(52,240,176,.12);
+      --primary: var(--acc-1); --primary-2: #fff; --primary-soft: color-mix(in srgb, var(--acc-1) 22%, transparent);
+      --glass-hi: rgba(255,255,255,.14); --glow: .75; --grid: rgba(140,190,255,.07);
+      --shadow: 0 18px 40px -20px rgba(0,0,0,.9);
+    }
+
+    /* Sfondo: aurora di luce + griglia sottile, fissi dietro a tutto */
+    body { background: var(--bg); font-family: var(--body); }
+    #app::before, #app::after { content: ""; position: fixed; inset: -20%; z-index: -1; pointer-events: none; }
+    #app::before { background:
+        radial-gradient(40% 35% at 15% 10%, color-mix(in srgb, var(--acc-1) calc(var(--glow) * 60%), transparent), transparent 70%),
+        radial-gradient(45% 40% at 90% 30%, color-mix(in srgb, var(--acc-3) calc(var(--glow) * 55%), transparent), transparent 70%),
+        radial-gradient(50% 40% at 40% 95%, color-mix(in srgb, var(--acc-2) calc(var(--glow) * 55%), transparent), transparent 70%);
+      filter: blur(10px); animation: deriva 28s ease-in-out infinite alternate; }
+    #app::after { inset: 0; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 28px 28px;
+      -webkit-mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent); }
+    #app { position: relative; isolation: isolate; }
+    @keyframes deriva { 0% { transform: translate3d(0,0,0) rotate(0deg); } 100% { transform: translate3d(4%, -3%, 0) rotate(8deg); } }
+
+    h1, h2, h3, .card-h h3, .pr-head h3, .brand b { font-family: var(--disp); font-weight: 600; letter-spacing: -.02em; }
+    .card-h h3, .pr-head h3 { font-size: .95rem; }
+    .num, .kpi .v, .rc-imp, .pr-imp, .carta-imp, .pr-date b { font-family: var(--disp); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+    /* Testata di vetro con linea di luce che scorre */
+    /* niente backdrop-filter qui: renderebbe la barra in basso (che sta dentro la testata) relativa alla testata */
+    header.top { border: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); }
+    header.top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--acc-1), var(--acc-3), var(--acc-2), transparent); background-size: 200% 100%; animation: scansione 6s linear infinite; box-shadow: 0 0 12px var(--acc-1); }
+    @keyframes scansione { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .brand b { font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: linear-gradient(90deg, var(--text), color-mix(in srgb, var(--acc-1) 70%, var(--text))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .brand > div:last-child { min-width: 0; }
+    header.top .logo { border: 0; background: #fff; color: var(--acc-2); box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 0 22px -4px var(--acc-1); }
+    .icon-btn { background: var(--surface-2); border-color: var(--border); color: var(--text); backdrop-filter: blur(8px); }
+    .dot.on { background: var(--neon-g); box-shadow: 0 0 10px var(--neon-g); animation: battito 2.4s ease-in-out infinite; }
+    .dot.off { box-shadow: 0 0 10px #ef4444; }
+    @keyframes battito { 50% { box-shadow: 0 0 2px var(--neon-g); } }
+
+    /* Vetro */
+    .card, .kpi, .mbox { background: var(--surface); border: 1px solid var(--border); box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow);
+      backdrop-filter: blur(20px) saturate(1.5); -webkit-backdrop-filter: blur(20px) saturate(1.5); border-radius: var(--radius); }
+    .mbox { background: var(--solid); }
+    input, select, textarea { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; color: var(--text); }
+    select option { background: var(--solid); color: var(--text); }
+    input:focus, select:focus, textarea:focus { border-color: var(--acc-1); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acc-1) 25%, transparent), 0 0 18px -6px var(--acc-1); }
+    .contextbar label { color: var(--muted); font-family: var(--disp); font-size: .72rem; }
+
+    /* Pulsanti al neon */
+    .btn { border-radius: 14px; font-weight: 800; }
+    .btn-primary { color: #fff; background: linear-gradient(120deg, var(--acc-1), var(--acc-3)); box-shadow: 0 0 0 1px rgba(255,255,255,.18) inset, 0 8px 24px -10px var(--acc-1); }
+    .btn-primary:hover { background: linear-gradient(120deg, var(--acc-1), var(--acc-3)); filter: brightness(1.12); }
+    .btn-ghost { background: var(--surface-2); border-color: var(--border); }
+    .btn-pay, .ib-pay { background: linear-gradient(135deg, #2af5b5, #0ea371); border-color: transparent; color: #04261b; box-shadow: 0 0 16px -4px #10e0a0; }
+    .btn-danger { background: linear-gradient(135deg, #ff6b8b, #e11d48); box-shadow: 0 0 16px -6px #ff4d6d; }
+    .ib { background: var(--surface-2); border-color: var(--border); border-radius: 12px; }
+    .ib.ib-pay { background: linear-gradient(135deg, #2af5b5, #0ea371); border-color: transparent; color: #04261b; }
+    .ib:hover { border-color: var(--acc-1); box-shadow: 0 0 12px -4px var(--acc-1); }
+    .btn:active, .ib:active, .chip:active { transform: scale(.95); }
+
+    /* Filtri */
+    .chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-weight: 700; }
+    .chip.active { background: linear-gradient(120deg, var(--acc-1), var(--acc-3)); border-color: transparent; color: #fff; box-shadow: 0 0 18px -6px var(--acc-1); }
+    .chip[data-stato="scadute"].active { background: linear-gradient(120deg, #ff6b8b, #e11d48); box-shadow: 0 0 18px -6px #ff4d6d; }
+    .chip[data-stato="prossimi"].active { background: linear-gradient(120deg, #ffd166, #ff9f1c); color: #2b1700; box-shadow: 0 0 18px -6px #ffb020; }
+    .chip[data-stato="pagate"].active { background: linear-gradient(120deg, #7cc4ff, #3b6cff); box-shadow: 0 0 18px -6px #3b82f6; }
+
+    /* Riquadri dei totali: vetro con bordo di luce del loro colore */
+    .kpi { --kc: var(--k, var(--acc-1)); overflow: hidden; }
+    .kpi::before { left: 14px; right: 14px; top: 0; bottom: auto; width: auto; height: 2px; border-radius: 2px; background: var(--kc); box-shadow: 0 0 14px 2px var(--kc); }
+    .kpi::after { content: ""; position: absolute; right: -30px; bottom: -40px; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--kc) 45%, transparent), transparent 70%); pointer-events: none; }
+    .kpi .t { text-transform: none; letter-spacing: 0; font-size: .76rem; color: var(--muted); }
+    .kpi .v { color: var(--kc); font-size: 1.18rem; font-weight: 700; text-shadow: 0 0 calc(var(--glow) * 18px) color-mix(in srgb, var(--kc) 60%, transparent); }
+    .kpi .s { color: var(--muted); }
+    .bar { background: var(--surface-2); border: 1px solid var(--border); height: 10px; }
+    .bar > span { background: linear-gradient(90deg, var(--acc-1), var(--acc-3)); box-shadow: 0 0 12px var(--acc-1); }
+
+    /* Avvisi */
+    .alert { border-radius: 16px; font-weight: 700; }
+    .alert-red { color: #fff; background: linear-gradient(120deg, #ff4d6d, #c81d5e); box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset, 0 0 26px -8px #ff4d6d; animation: allarme 2.8s ease-in-out infinite; }
+    .alert-red .btn-danger { background: #fff; color: #c81d5e; box-shadow: none; }
+    @keyframes allarme { 50% { box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset, 0 0 40px -6px #ff4d6d; } }
+    .alert-ok { background: var(--green-soft); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 30%, transparent); }
+
+    /* Prossime scadenze: data in capsula luminosa */
+    .pr-row { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "d i imp" "d i act"; gap: 2px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 18px; padding: 10px 12px; }
+    .pr-row .pr-date { grid-area: d; }
+    .pr-row .pr-info { grid-area: i; align-self: center; }
+    .pr-row .pr-info b { white-space: normal; }
+    .pr-row .pr-info small { display: block; margin-top: 2px; color: var(--muted); }
+    .pr-row .pr-imp { grid-area: imp; text-align: right; font-size: .98rem; }
+    .pr-row .ib { grid-area: act; justify-self: end; }
+    .pr-row .ib + .ib { margin-right: 40px; }
+    .pr-date { width: 54px; display: flex; flex-direction: column; justify-content: center; padding: 6px 0; border-radius: 16px; color: var(--text);
+      background: linear-gradient(var(--solid), var(--solid)) padding-box, linear-gradient(160deg, var(--neon-y), #ff7a1a) border-box; border: 1.5px solid transparent; box-shadow: 0 0 16px -6px #ff9f1c; }
+    .pr-date b { font-size: 1.3rem; }
+    .pr-date span { color: #ff9f1c; font-size: .62rem; letter-spacing: .06em; }
+    .pr-date.oggi { background: linear-gradient(var(--solid), var(--solid)) padding-box, linear-gradient(160deg, #ff6b8b, #e11d48) border-box; box-shadow: 0 0 18px -4px #ff4d6d; }
+    .pr-date.oggi span { color: var(--red); }
+
+    /* Elenco scadenze (telefono): vetro con barra di luce dello stato */
+    .rcard { background: var(--surface); border: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 20px; padding: 14px 14px 12px 20px; position: relative; overflow: hidden; box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow); }
+    .rcard::before { content: ""; position: absolute; left: 8px; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: #ff9f1c; box-shadow: 0 0 12px #ff9f1c; }
+    .rcard.st-scaduto::before { background: #ff4d6d; box-shadow: 0 0 12px #ff4d6d; }
+    .rcard.st-pagato::before { background: #6ea8ff; box-shadow: 0 0 12px #6ea8ff; }
+    .rcard.st-scaduto { background: linear-gradient(100deg, color-mix(in srgb, #ff4d6d 12%, transparent), var(--surface) 55%); }
+    .rcard .rc-imp { font-size: 1.02rem; }
+    .badge { font-weight: 800; border: 1px solid transparent; }
+    .b-scaduto { background: var(--red-soft); color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+    .b-dapagare { background: var(--amber-soft); color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+    .b-pagato { background: var(--blue-soft); color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+    .table-wrap { border-color: var(--border); background: var(--surface); }
+    th { background: var(--solid); }
+    td.sticky { background: var(--solid); }
+
+    /* Carta e categorie */
+    .carta-av { background: linear-gradient(135deg, var(--acc-1), var(--acc-3)); color: #fff; font-family: var(--disp); font-size: .9rem; box-shadow: 0 0 14px -4px var(--acc-1); }
+    .carta-riga, .carta-cart { border-color: var(--border); }
+    .cat-btn { background: var(--surface-2); border-color: var(--border); }
+    .cat-btn.active { border-color: var(--acc-1); background: var(--primary-soft); color: var(--text); box-shadow: 0 0 18px -6px var(--acc-1); }
+    .drop { border-color: var(--acc-1); background: var(--primary-soft); }
+
+    /* Finestre e avvisi a scomparsa */
+    .modal { background: rgba(3,8,16,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .modal.open .mbox { animation: sali .25s cubic-bezier(.2,.9,.3,1.2); }
+    @keyframes sali { from { transform: translateY(16px) scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+    #toast, .bulk { background: rgba(15,26,42,.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; }
+
+    /* Accesso */
+    .login { background: radial-gradient(50% 40% at 15% 10%, var(--acc-1), transparent 70%), radial-gradient(50% 45% at 90% 90%, var(--acc-3), transparent 70%), radial-gradient(40% 30% at 80% 20%, var(--acc-2), transparent 70%), #050b14;
+      background-size: 160% 160%; animation: aurora 16s ease-in-out infinite alternate; }
+    @keyframes aurora { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+    .login-box { border-radius: 30px; border: 1px solid rgba(255,255,255,.18); border-top: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: #fff; backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 30px 80px -30px rgba(0,0,0,.8); }
+    .login-box h2 { font-family: var(--disp); color: #fff; font-size: 1.25rem; }
+    .login-box p.sub, .login-box label { color: rgba(255,255,255,.75); }
+    .login-box input[type=email], .login-box input[type=password] { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+    .login-box input:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 0 20px -6px var(--acc-1); }
+    .login-box .btn { background: linear-gradient(120deg, var(--acc-1), var(--acc-3)); color: #fff; box-shadow: 0 0 26px -8px var(--acc-1); }
+    .login-box .link-btn { color: rgba(255,255,255,.7); }
+    .login-logo { background: #fff; border-radius: 20px; padding: 14px 18px; box-shadow: 0 0 40px -10px var(--acc-1); }
+
+    /* Barra in basso del telefono: dock di vetro su una fila, voce attiva che si accende */
+    @media (max-width: 820px) {
+      .nav { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); border: 1px solid var(--border); border-radius: 24px; grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; padding: 6px;
+        background: color-mix(in srgb, var(--bg) 60%, transparent); backdrop-filter: blur(22px) saturate(1.6); -webkit-backdrop-filter: blur(22px) saturate(1.6); box-shadow: inset 0 1px 0 var(--glass-hi), 0 18px 40px -16px rgba(0,0,0,.6); }
+      .nav button { position: relative; color: var(--muted); font-size: .58rem; letter-spacing: -.01em; padding: 7px 0 6px; border-radius: 18px; min-width: 0; overflow: hidden; white-space: nowrap; }
+      .nav button span { font-size: 1.2rem; transition: transform .25s cubic-bezier(.2,.9,.3,1.4); }
+      .nav button.active { color: #fff; background: linear-gradient(140deg, var(--acc-1), var(--acc-3)); box-shadow: 0 0 22px -6px var(--acc-1), inset 0 1px 0 rgba(255,255,255,.35); }
+      .nav button.active span { transform: translateY(-2px) scale(1.12); filter: drop-shadow(0 0 6px rgba(255,255,255,.6)); }
+      .wrap { padding-bottom: 130px; }
+      .bulk { bottom: calc(92px + env(safe-area-inset-bottom)); }
+      #toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+    }
+
+    /* Menu chiari: testata e barra in basso sempre luminose, anche col tema scuro */
+    header.top { background: rgba(255,255,255,.94); color: #0f1a2a; box-shadow: 0 10px 30px -18px rgba(0,0,0,.6); }
+    header.top .brand b { background: linear-gradient(90deg, #0f1a2a, var(--acc-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    header.top .brand small { color: #586679; }
+    header.top .icon-btn { background: #f1f5f9; border-color: rgba(15,30,60,.12); color: #0f1a2a; }
+    header.top .logo { box-shadow: 0 0 0 1px rgba(15,30,60,.08), 0 0 18px -6px var(--acc-1); }
+    @media (min-width: 821px) {
+      header.top .nav button { color: #586679; }
+      header.top .nav button:hover { background: #f1f5f9; }
+      header.top .nav button.active { color: #fff; background: linear-gradient(120deg, var(--acc-1), var(--acc-2)); }
+    }
+    @media (max-width: 820px) {
+      header.top { border-radius: 0 0 22px 22px; }
+      .nav { background: rgba(255,255,255,.94); border-color: rgba(15,30,60,.08); box-shadow: 0 18px 40px -14px rgba(0,0,0,.55); }
+      .nav button { color: #4a586b; font-weight: 700; }
+    }
+
+    /* Colori dei riquadri fissi (--kc perché lo stile in linea --k vince sempre sul foglio di stile) */
+    .kpi[style*="--amber"] { --kc: #ff9f1c; }
+    .kpi[style*="--blue"] { --kc: #4f8bff; }
+    .kpi[style*="--red"] { --kc: #ff4d6d; }
+    .kpi[style*="--green"] { --kc: #10c98f; }
+    .kpi[style*="--primary"] { --kc: var(--acc-k, var(--acc-3)); }
+    @media (prefers-reduced-motion: reduce) {
+      #app::before, header.top::after, .login, .alert-red, .dot.on { animation: none; }
+      .modal.open .mbox { animation: none; }
+    }
+    /* Logo "€" del Personale: niente viola, prende i colori d'accento */
+    .logo:not(:has(svg)) { background: linear-gradient(135deg, var(--acc-1), var(--acc-2)); color: #fff; }
+    header.top .logo:not(:has(svg)) { background: linear-gradient(135deg, var(--acc-1), var(--acc-2)); color: #fff; }
+    /* Colori d'accento di questa app (l'unica parte diversa tra Generale e Personale) */
+    :root { --acc-1: #ff2e4d; --acc-2: #c8102e; --acc-3: #ff8a1f; --acc-k: #22d3ee; }
 </style>
 </head>
 <body>

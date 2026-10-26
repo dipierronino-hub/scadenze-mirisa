@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Scadenze">
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -522,6 +523,23 @@
     header.top .logo:not(:has(svg)) { background: linear-gradient(135deg, var(--acc-1), var(--acc-2)); color: #fff; }
     /* Colori d'accento di questa app (l'unica parte diversa tra Generale e Personale) */
     :root { --acc-1: #ff2e4d; --acc-2: #c8102e; --acc-3: #ff8a1f; --acc-k: #22d3ee; }
+
+    /* ---------- Telegram Mini App ----------
+       Attivo solo con la classe "tg-tema" (app aperta da Telegram): sfondo e testi seguono
+       il tema di Telegram, le schede a vetro restano quelle dell'app. Se una variabile di
+       Telegram manca valgono i colori del tema dell'app. */
+    :root.tg-tema {
+      --bg: var(--tg-theme-secondary-bg-color, var(--tg-theme-bg-color, #edf2f7));
+      --solid: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+      --text: var(--tg-theme-text-color, #0f1a2a);
+      --muted: var(--tg-theme-hint-color, #586679);
+    }
+    :root.tg-tema[data-theme="dark"] {
+      --bg: var(--tg-theme-secondary-bg-color, var(--tg-theme-bg-color, #050b14));
+      --solid: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #0f1b2b));
+      --text: var(--tg-theme-text-color, #eef4fb);
+      --muted: var(--tg-theme-hint-color, #93a3b8);
+    }
 </style>
 </head>
 <body>
@@ -1049,6 +1067,11 @@
 <script>
 'use strict';
 
+// Telegram Mini App: fuori da Telegram "tg" esiste ma platform è "unknown" e non si fa nulla.
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = !!(tg && tg.platform && tg.platform !== 'unknown');
+if (inTelegram) { tg.ready(); tg.expand(); }
+
 // ==============================================================
 // CONFIGURAZIONE FIREBASE (la apiKey non è segreta: proteggono le Regole)
 // ==============================================================
@@ -1493,6 +1516,20 @@ $('btnTema').addEventListener('click', () => {
   try { localStorage.setItem('scad_tema', nuovo); } catch (e) {}
   if (S.vista === 'riepiloghi') renderRiepiloghi();
 });
+// Dentro Telegram si segue il tema di Telegram (anche quando cambia), finché non si preme 🌓.
+if (inTelegram) {
+  const radice = document.documentElement;
+  const temaTelegram = () => {
+    if (!radice.classList.contains('tg-tema')) return;
+    applicaTema(tg.colorScheme === 'dark' ? 'dark' : 'light');
+    if (tg.isVersionAtLeast('6.1')) { try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) { /* client vecchio */ } }
+    if (S.vista === 'riepiloghi') renderRiepiloghi();
+  };
+  radice.classList.add('tg-tema');
+  temaTelegram();
+  tg.onEvent('themeChanged', temaTelegram);
+  $('btnTema').addEventListener('click', () => radice.classList.remove('tg-tema'));
+}
 
 // ==============================================================
 // AUTENTICAZIONE

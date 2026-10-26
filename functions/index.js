@@ -39,10 +39,10 @@ async function leggiVoci() {
 }
 
 async function inviaTelegram(testo) {
-  const risp = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN.value()}/sendMessage`, {
+  const risp = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN.value().trim()}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID.value(), text: testo, parse_mode: 'HTML', disable_web_page_preview: true })
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID.value().trim(), text: testo, parse_mode: 'HTML', disable_web_page_preview: true })
   });
   if (!risp.ok) throw new Error(`Telegram ${risp.status}: ${await risp.text()}`);
 }

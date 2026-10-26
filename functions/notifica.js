@@ -90,10 +90,11 @@ function spezza(righe) {
 
 // ---------- Comandi del bot (si scrivono con o senza "/", maiuscole o minuscole) ----------
 const COMANDI = {
-  scadenze: ['scadenze', 'prossime'], scadute: ['scadute', 'arretrati'], stato: ['stato', 'riepilogo'],
+  scadenze: ['scadenze', 'prossime'], assegni: ['assegni', 'assegno'], scadute: ['scadute', 'arretrati'], stato: ['stato', 'riepilogo'],
   aiuto: ['start', 'help', 'aiuto', 'comandi']
 };
 const GIORNI_COMANDO = 7;
+const GIORNI_ASSEGNI = 30;
 
 function interpretaComando(testo) {
   const parola = String(testo || '').trim().toLowerCase().replace(/^\//, '').split(/[\s@]/)[0];
@@ -109,8 +110,9 @@ function conteggio(voci) {
   return `${voci.length} ${voci.length === 1 ? 'voce' : 'voci'} · <b>${euro(tot)}</b>`;
 }
 
-// Risposta a un comando: elenco di messaggi HTML (sempre almeno uno)
-function rispostaComando(comando, voci, oggi, intestazione) {
+// Risposta a un comando: elenco di messaggi HTML (sempre almeno uno).
+// conAssegni: la fonte assegni esiste (solo Generale), per mostrare /assegni nell'aiuto.
+function rispostaComando(comando, voci, oggi, intestazione, conAssegni = false) {
   const titolo = `🔔 <b>${esc(intestazione)}</b>`;
   const aperte = voci.filter(v => !v.pagato && ISO_RE.test(v.data));
   const entro = g => aperte.filter(v => { const d = giorniTra(oggi, v.data); return d >= 0 && d <= g; });
@@ -119,6 +121,14 @@ function rispostaComando(comando, voci, oggi, intestazione) {
     const m = componiMessaggi(selezionaInScadenza(voci, oggi, GIORNI_COMANDO), oggi, intestazione);
     return m.length ? m : [`${titolo}\n\n✅ Nessuna voce da pagare nei prossimi ${GIORNI_COMANDO} giorni.` +
       (scadute.length ? `\n⚠️ Già scadute e non pagate: ${conteggio(scadute)}. Scrivi /scadute per l'elenco.` : '')];
+  }
+  if (comando === 'assegni') {
+    const assegni = voci.filter(v => v.tipo === 'assegno');
+    const scad = scadute.filter(v => v.tipo === 'assegno');
+    const m = componiMessaggi(selezionaInScadenza(assegni, oggi, GIORNI_ASSEGNI), oggi, intestazione + ' · Assegni');
+    if (m.length) return m;
+    return [`${titolo}\n\n✅ Nessun assegno da pagare nei prossimi ${GIORNI_ASSEGNI} giorni.` +
+      (scad.length ? `\n⚠️ Assegni già scaduti e non pagati: ${conteggio(scad)}.` : '')];
   }
   if (comando === 'scadute') {
     if (!scadute.length) return [`${titolo}\n\n✅ Nessuna voce scaduta da pagare.`];
@@ -133,6 +143,7 @@ function rispostaComando(comando, voci, oggi, intestazione) {
   }
   return [[titolo, '', 'Comandi:',
     `/scadenze · da pagare nei prossimi ${GIORNI_COMANDO} giorni`,
+    ...(conAssegni ? [`/assegni · solo assegni, prossimi ${GIORNI_ASSEGNI} giorni`] : []),
     '/scadute · scadute e non pagate',
     '/stato · totali in breve',
     '', 'Per aprire lo scadenzario usa il pulsante in basso a sinistra.'].join('\n')];

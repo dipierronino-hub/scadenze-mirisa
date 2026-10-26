@@ -94,3 +94,17 @@ test('/scadute elenca le arretrate in ordine di data, /stato dà i totali', () =
   assert.match(st, /Prossimi 30 giorni: 2 voci · <b>12,00 €<\/b>/);
   assert.deepEqual(rispostaComando('scadute', [], '2026-10-26', 'X'), ['🔔 <b>X</b>\n\n✅ Nessuna voce scaduta da pagare.']);
 });
+
+test('/assegni mostra solo gli assegni dei prossimi 30 giorni', () => {
+  const a = (data, importo, pagato = false) => NORMALIZZA.assegno({ data, importo, pagato, numero: '1', banca: 'BPPB', beneficiario: 'Rossi' });
+  const voci = [s('Bolletta', '2026-10-27', 10), a('2026-11-20', 10000), a('2026-12-30', 20000), a('2026-10-01', 5000), a('2026-10-28', 999, true)];
+  const [m] = rispostaComando('assegni', voci, '2026-10-26', 'X', true);
+  assert.match(m, /X · Assegni/);
+  assert.match(m, /Assegno Rossi — <b>100,00 €<\/b>/);
+  assert.doesNotMatch(m, /Bolletta|200,00|9,99/);
+  assert.match(m, /Inoltre 1 voce già scaduta e non pagata \(50,00 €\)/);
+  assert.match(rispostaComando('assegni', [a('2026-10-01', 5000)], '2026-10-26', 'X', true)[0], /Nessun assegno da pagare.*\n⚠️ Assegni già scaduti e non pagati: 1 voce/);
+  assert.equal(interpretaComando('Assegni'), 'assegni');
+  assert.match(rispostaComando('aiuto', [], '2026-10-26', 'X', true)[0], /\/assegni/);
+  assert.doesNotMatch(rispostaComando('aiuto', [], '2026-10-26', 'X', false)[0], /\/assegni/);
+});

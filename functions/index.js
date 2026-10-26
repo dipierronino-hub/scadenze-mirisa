@@ -17,6 +17,7 @@ const { oggiRoma, selezionaInScadenza, componiMessaggi, NORMALIZZA, esc, interpr
 const TELEGRAM_TOKEN = defineSecret('TELEGRAM_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const GIORNI = 3;
+const CON_ASSEGNI = CONFIG.fonti.some(f => f.tipo === 'assegno');
 const ATTESA_MAX_MS = 20000; // senza permessi il database non risponde mai: meglio arrendersi e inviare il resto
 
 const app = {};
@@ -96,10 +97,11 @@ exports.botTelegram = onRequest({
       await chiamaTelegram('setWebhook', { url, secret_token: chiaveWebhook(), allowed_updates: ['message'], drop_pending_updates: true });
       await chiamaTelegram('setMyCommands', { commands: [
         { command: 'scadenze', description: 'Da pagare nei prossimi 7 giorni' },
+        ...(CON_ASSEGNI ? [{ command: 'assegni', description: 'Solo assegni, prossimi 30 giorni' }] : []),
         { command: 'scadute', description: 'Scadute e non pagate' },
         { command: 'stato', description: 'Totali in breve' }
       ] });
-      res.status(200).send('✅ Bot collegato: ora risponde a /scadenze, /scadute e /stato.');
+      res.status(200).send(`✅ Bot collegato: ora risponde a /scadenze, ${CON_ASSEGNI ? '/assegni, ' : ''}/scadute e /stato.`);
     } catch (e) {
       logger.error('Collegamento bot non riuscito', e);
       res.status(500).send('❌ Collegamento non riuscito: ' + e.message);
@@ -113,7 +115,7 @@ exports.botTelegram = onRequest({
   try {
     const comando = interpretaComando(msg.text);
     const { voci, avvisi } = comando === 'aiuto' ? { voci: [], avvisi: [] } : await leggiVoci();
-    const messaggi = rispostaComando(comando, voci, oggiRoma(), CONFIG.intestazione);
+    const messaggi = rispostaComando(comando, voci, oggiRoma(), CONFIG.intestazione, CON_ASSEGNI);
     if (avvisi.length) messaggi[messaggi.length - 1] += '\n\n' + avvisi.join('\n');
     for (const m of messaggi) await inviaTelegram(m);
   } catch (e) {

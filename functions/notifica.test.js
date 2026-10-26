@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { oggiRoma, euro, NORMALIZZA, selezionaInScadenza, componiMessaggi } = require('./notifica');
+const { oggiRoma, euro, NORMALIZZA, selezionaInScadenza, componiMessaggi, interpretaComando, rispostaComando } = require('./notifica');
 
 const s = (titolo, scadenza, importo, pagato = false, extra = {}) => NORMALIZZA.scadenza({ titolo, scadenza, importo, pagato, ...extra });
 
@@ -59,4 +59,38 @@ test('elenchi lunghi divisi in più messaggi sotto il limite di Telegram', () =>
 test('euro all\'italiana', () => {
   assert.equal(euro(1234567.891), '1.234.567,89 €');
   assert.equal(euro(0), '0,00 €');
+});
+
+test('comandi riconosciuti con o senza "/", maiuscole e nome del bot', () => {
+  assert.equal(interpretaComando('/scadenze'), 'scadenze');
+  assert.equal(interpretaComando('Scadenze'), 'scadenze');
+  assert.equal(interpretaComando('/stato@ScadenzeMirisaBot'), 'stato');
+  assert.equal(interpretaComando(' stato '), 'stato');
+  assert.equal(interpretaComando('/scadute'), 'scadute');
+  assert.equal(interpretaComando('Help'), 'aiuto');
+  assert.equal(interpretaComando('ciao'), 'aiuto');
+});
+
+test('/scadenze guarda 7 giorni e avvisa se non c\'è nulla', () => {
+  const voci = [s('Tra 6', '2026-11-01', 10), s('Tra 8', '2026-11-03', 20), s('Vecchia', '2026-10-01', 5)];
+  const [m] = rispostaComando('scadenze', voci, '2026-10-26', 'X');
+  assert.match(m, /Tra 6/);
+  assert.doesNotMatch(m, /Tra 8/);
+  const [vuoto] = rispostaComando('scadenze', [s('Vecchia', '2026-10-01', 5)], '2026-10-26', 'X');
+  assert.match(vuoto, /Nessuna voce da pagare nei prossimi 7 giorni/);
+  assert.match(vuoto, /Già scadute e non pagate: 1 voce · <b>5,00 €<\/b>/);
+});
+
+test('/scadute elenca le arretrate in ordine di data, /stato dà i totali', () => {
+  const voci = [s('B', '2026-10-20', 2), s('A', '2026-10-10', 1), s('Pagata', '2026-10-05', 9, true), s('Oggi', '2026-10-26', 4), s('Tra 20', '2026-11-15', 8)];
+  const [sc] = rispostaComando('scadute', voci, '2026-10-26', 'X');
+  assert.ok(sc.indexOf('• A') < sc.indexOf('• B'));
+  assert.doesNotMatch(sc, /Pagata/);
+  assert.match(sc, /Totale: 2 voci · <b>3,00 €<\/b>/);
+  const [st] = rispostaComando('stato', voci, '2026-10-26', 'X');
+  assert.match(st, /Scadute non pagate: 2 voci · <b>3,00 €<\/b>/);
+  assert.match(st, /Oggi: 1 voce · <b>4,00 €<\/b>/);
+  assert.match(st, /Prossimi 7 giorni: 1 voce/);
+  assert.match(st, /Prossimi 30 giorni: 2 voci · <b>12,00 €<\/b>/);
+  assert.deepEqual(rispostaComando('scadute', [], '2026-10-26', 'X'), ['🔔 <b>X</b>\n\n✅ Nessuna voce scaduta da pagare.']);
 });

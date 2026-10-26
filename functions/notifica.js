@@ -73,7 +73,11 @@ function componiMessaggi({ prossime, scadute }, oggi, intestazione) {
   const totale = prossime.reduce((s, v) => s + v.importo, 0);
   righe.push('', `Totale: ${prossime.length} ${prossime.length === 1 ? 'voce' : 'voci'} · <b>${euro(totale)}</b>`);
   if (scadute.n) righe.push(`⚠️ Inoltre ${scadute.n} ${scadute.n === 1 ? 'voce già scaduta' : 'voci già scadute'} e non ${scadute.n === 1 ? 'pagata' : 'pagate'} (${euro(scadute.importo)}).`);
-  // Spezza in più messaggi se si supera il limite di Telegram, senza tagliare una voce a metà
+  return spezza(righe);
+}
+
+// Spezza in più messaggi se si supera il limite di Telegram, senza tagliare una voce a metà
+function spezza(righe) {
   const messaggi = [];
   let corrente = '';
   righe.forEach(r => {
@@ -84,4 +88,54 @@ function componiMessaggi({ prossime, scadute }, oggi, intestazione) {
   return messaggi;
 }
 
-module.exports = { oggiRoma, giorniTra, euro, esc, NORMALIZZA, selezionaInScadenza, componiMessaggi };
+// ---------- Comandi del bot (si scrivono con o senza "/", maiuscole o minuscole) ----------
+const COMANDI = {
+  scadenze: ['scadenze', 'prossime'], scadute: ['scadute', 'arretrati'], stato: ['stato', 'riepilogo'],
+  aiuto: ['start', 'help', 'aiuto', 'comandi']
+};
+const GIORNI_COMANDO = 7;
+
+function interpretaComando(testo) {
+  const parola = String(testo || '').trim().toLowerCase().replace(/^\//, '').split(/[\s@]/)[0];
+  return Object.keys(COMANDI).find(c => COMANDI[c].includes(parola)) || 'aiuto';
+}
+
+function rigaVoce(v, conData) {
+  const dett = [conData ? giornoEsteso(v.data) : '', v.dettaglio].filter(Boolean).join(' · ');
+  return `• ${esc(v.descrizione)} — <b>${euro(v.importo)}</b>` + (dett ? `\n   <i>${esc(dett)}</i>` : '');
+}
+function conteggio(voci) {
+  const tot = voci.reduce((s, v) => s + v.importo, 0);
+  return `${voci.length} ${voci.length === 1 ? 'voce' : 'voci'} · <b>${euro(tot)}</b>`;
+}
+
+// Risposta a un comando: elenco di messaggi HTML (sempre almeno uno)
+function rispostaComando(comando, voci, oggi, intestazione) {
+  const titolo = `🔔 <b>${esc(intestazione)}</b>`;
+  const aperte = voci.filter(v => !v.pagato && ISO_RE.test(v.data));
+  const entro = g => aperte.filter(v => { const d = giorniTra(oggi, v.data); return d >= 0 && d <= g; });
+  const scadute = aperte.filter(v => giorniTra(oggi, v.data) < 0).sort((a, b) => a.data.localeCompare(b.data));
+  if (comando === 'scadenze') {
+    const m = componiMessaggi(selezionaInScadenza(voci, oggi, GIORNI_COMANDO), oggi, intestazione);
+    return m.length ? m : [`${titolo}\n\n✅ Nessuna voce da pagare nei prossimi ${GIORNI_COMANDO} giorni.` +
+      (scadute.length ? `\n⚠️ Già scadute e non pagate: ${conteggio(scadute)}. Scrivi /scadute per l'elenco.` : '')];
+  }
+  if (comando === 'scadute') {
+    if (!scadute.length) return [`${titolo}\n\n✅ Nessuna voce scaduta da pagare.`];
+    return spezza([titolo, '<i>Scadute e non pagate</i>', '', ...scadute.map(v => rigaVoce(v, true)), '', `Totale: ${conteggio(scadute)}`]);
+  }
+  if (comando === 'stato') {
+    return [[titolo, `<i>${giornoEsteso(oggi)}</i>`, '',
+      `⚠️ Scadute non pagate: ${conteggio(scadute)}`,
+      `🔴 Oggi: ${conteggio(entro(0))}`,
+      `📅 Prossimi 7 giorni: ${conteggio(entro(7))}`,
+      `🗓 Prossimi 30 giorni: ${conteggio(entro(30))}`].join('\n')];
+  }
+  return [[titolo, '', 'Comandi:',
+    `/scadenze · da pagare nei prossimi ${GIORNI_COMANDO} giorni`,
+    '/scadute · scadute e non pagate',
+    '/stato · totali in breve',
+    '', 'Per aprire lo scadenzario usa il pulsante in basso a sinistra.'].join('\n')];
+}
+
+module.exports = { oggiRoma, giorniTra, euro, esc, NORMALIZZA, selezionaInScadenza, componiMessaggi, interpretaComando, rispostaComando };

@@ -14,6 +14,7 @@ const { oggiRoma, selezionaInScadenza, componiMessaggi, NORMALIZZA, esc } = requ
 const TELEGRAM_TOKEN = defineSecret('TELEGRAM_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const GIORNI = 3;
+const ATTESA_MAX_MS = 20000; // senza permessi il database non risponde mai: meglio arrendersi e inviare il resto
 
 const app = {};
 function database(url) {
@@ -21,15 +22,22 @@ function database(url) {
   return getDatabase(app[url]);
 }
 
+function conTimeout(promessa, ms, nome) {
+  let timer;
+  const scaduto = new Promise((_, rifiuta) => { timer = setTimeout(() => rifiuta(new Error(`${nome}: nessuna risposta in ${ms / 1000} s (permessi mancanti?)`)), ms); });
+  return Promise.race([promessa, scaduto]).finally(() => clearTimeout(timer));
+}
+
 async function leggiVoci() {
   const voci = [], avvisi = [];
   for (const f of CONFIG.fonti) {
     try {
-      const dati = (await database(f.databaseURL).ref(f.percorso).get()).val() || {};
+      const dati = (await conTimeout(database(f.databaseURL).ref(f.percorso).get(), ATTESA_MAX_MS, f.percorso)).val() || {};
       // perUtente: dati divisi per utente (personale/{uid}/{id}), si uniscono tutti
       const record = f.perUtente ? Object.values(dati).flatMap(u => Object.values(u || {})) : Object.values(dati);
       record.filter(r => r && typeof r === 'object').forEach(r => voci.push(NORMALIZZA[f.tipo](r)));
     } catch (e) {
+      database(f.databaseURL).goOffline(); // ferma i tentativi di riconnessione in background
       if (!f.facoltativa) throw e;
       logger.warn(`Fonte ${f.tipo} non letta`, e);
       avvisi.push(`ℹ️ <i>${esc(f.tipo === 'assegno' ? 'Assegni' : f.tipo)} non letti: ${esc(e.message)}</i>`);
@@ -39,10 +47,10 @@ async function leggiVoci() {
 }
 
 async function inviaTelegram(testo) {
-  const risp = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN.value()}/sendMessage`, {
+  const risp = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN.value().trim()}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID.value(), text: testo, parse_mode: 'HTML', disable_web_page_preview: true })
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID.value().trim(), text: testo, parse_mode: 'HTML', disable_web_page_preview: true })
   });
   if (!risp.ok) throw new Error(`Telegram ${risp.status}: ${await risp.text()}`);
 }

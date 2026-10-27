@@ -1,7 +1,7 @@
 // Service worker dello Scadenzario Generale.
 // Serve solo a rendere l'app installabile e ad aprirla anche con rete lenta.
 // I dati delle scadenze NON vengono mai salvati qui: arrivano sempre da Firebase dopo il login.
-const CACHE = 'scadenzario-shell-v20';
+const CACHE = 'scadenzario-shell-v21';
 const SHELL = ['./', './index.html', './riconciliazione.js', './riepilogo.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

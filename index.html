@@ -3916,9 +3916,10 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 //   …/scadenze-mirisa/#atlantis=<JSON in base64url>
 // I dati stanno nel frammento (#), quindi non arrivano a nessun server. Si apre, si conferma, si salva.
 // Fornitori con addebito diretto: per ora Radius, pagata con SDD sul c/c Cassa Rurale di Castellana Grotte.
+// commissione: quanto addebita la banca per ogni pagamento, sommato all'importo della fattura.
 // ==============================================================
 const FORNITORI_ADDEBITO = {
-  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte' }
+  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte', commissione: 1 }
 };
 const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
 function leggiLinkAtlantis() {
@@ -3959,7 +3960,7 @@ function mostraLinkAtlantis(imp) {
       <input type="checkbox" data-atl="${k}" ${gia ? 'disabled' : 'checked'} style="width:auto;">
       <span style="flex:1;min-width:0;">Fatt. n. ${esc(f.numero)} del ${formatData(f.data)}<br>
         <small class="muted">${gia ? 'già presente' : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
-      <b class="num">${formatEuro(f.importo)}</b>
+      <b class="num">${formatEuro(f.importo + (imp.fo.commissione || 0))}${imp.fo.commissione ? `<br><small class="muted">+${formatEuro(imp.fo.commissione)} comm.</small>` : ''}</b>
     </label>`).join('');
   $('atlCrea').hidden = !nuove;
   $('atlCrea').onclick = async () => {
@@ -3972,8 +3973,9 @@ function mostraLinkAtlantis(imp) {
         id, pianoId: 'SPESE_SINGOLE', categoria: imp.fo.categoria,
         titolo: `Fattura ${imp.fo.breve} n. ${f.numero} del ${formatData(f.data)}`,
         ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
-        importo: f.importo, scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
-        note: `Addebito diretto su c/c ${imp.fo.conto} (${imp.fo.banca}). Importata da Atlantis.`
+        importo: num2(f.importo + (imp.fo.commissione || 0)), scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
+        note: `Addebito diretto su c/c ${imp.fo.conto} (${imp.fo.banca}).` +
+          (imp.fo.commissione ? ` Fattura ${formatEuro(f.importo)} + commissione banca ${formatEuro(imp.fo.commissione)}.` : '') + ' Importata da Atlantis.'
       }));
     });
     const n = Object.keys(upd).length;

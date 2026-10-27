@@ -1118,6 +1118,7 @@ const CATEGORIE = [
   { k: 'Finanziamento / Prestito', i: '💳', rif: 'Pratica n.', es: 'Rata finanziamento', ric: 1 },
   { k: 'Abbonamenti', i: '🔁', rif: 'Contratto n.', es: 'Abbonamento internet', ric: 1 },
   { k: 'Rateizzazione Equitalia', i: '📑', rif: 'N. cartella', es: 'Rata cartella', ric: 1 },
+  { k: 'Fatture Radius', i: '📄', rif: 'N. fattura', es: 'Fattura Radius n. 2700123456', ric: 0 },
   { k: 'Altro', i: '📌', rif: 'Riferimento', es: 'Descrizione', ric: 0 }
 ];
 const ICONA_ADER = '📑';
@@ -3917,7 +3918,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 // Fornitori con addebito diretto: per ora Radius, pagata con SDD sul c/c Cassa Rurale di Castellana Grotte.
 // ==============================================================
 const FORNITORI_ADDEBITO = {
-  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte' }
+  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte' }
 };
 const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
 function leggiLinkAtlantis() {
@@ -3968,7 +3969,7 @@ function mostraLinkAtlantis(imp) {
       if (!f || fatturaGiaPresente(imp, f)) return;
       const id = idFatturaAtlantis(imp.chiaveFo, f.numero);
       upd[id] = conMeta(normalizza({
-        id, pianoId: 'SPESE_SINGOLE', categoria: 'Altro',
+        id, pianoId: 'SPESE_SINGOLE', categoria: imp.fo.categoria,
         titolo: `Fattura ${imp.fo.breve} n. ${f.numero} del ${formatData(f.data)}`,
         ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
         importo: f.importo, scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,

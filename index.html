@@ -986,6 +986,11 @@
         <div><label class="f" for="payData">Data pagamento</label><input type="date" id="payData" required></div>
         <div><label class="f" for="payBanca">Banca / Conto</label><select id="payBanca" class="sel-banche" required></select></div>
       </div>
+      <div id="payCommBox" hidden>
+        <label class="f" for="payComm">Commissione banca (€)</label>
+        <input type="number" id="payComm" step="0.01" min="0" inputmode="decimal">
+        <p class="hint" id="payCommHint"></p>
+      </div>
       <div class="mfoot">
         <button type="button" class="btn btn-ghost" data-close="payModal">Annulla</button>
         <button type="submit" class="btn btn-pay">Conferma</button>
@@ -1213,6 +1218,7 @@ function normalizza(r) {
     banca: r.banca || null,
     scadenzaOrdinaria: r.scadenzaOrdinaria ? String(r.scadenzaOrdinaria).slice(0, 10) : null,
     importoOrdinario: r.importoOrdinario ? num2(r.importoOrdinario) : null,
+    commissione: r.commissione === null || r.commissione === undefined || r.commissione === '' ? null : num2(r.commissione),
     note: String(r.note || ''),
     riferimento: String(r.riferimento || ''),
     ente: String(r.ente || ''),
@@ -2752,6 +2758,19 @@ $('bulkAnnulla').addEventListener('click', () => { S.sel.clear(); renderLista();
 
 // ---------- Pagamento ----------
 let payIds = [];
+function commissioneDi(it) {
+  if (!it) return null;
+  if (typeof it.commissione === 'number') return it.commissione;
+  const m = String(it.note || '').match(/commissione banca ([\d.,]+)/i); // scadenze create prima del campo
+  return m ? parseValore(m[1]) : null;
+}
+function aggiornaHintComm() {
+  const it = S.items[payIds[0]]; if (!it) return;
+  const base = num2(Number(it.importo) - (commissioneDi(it) || 0));
+  const c = Math.max(0, num2(parseValore($('payComm').value)));
+  $('payCommHint').textContent = `Fattura ${formatEuro(base)} + commissione ${formatEuro(c)} = ${formatEuro(base + c)}. Metti 0 se paghi con bonifico.`;
+}
+$('payComm').addEventListener('input', aggiornaHintComm);
 function apriPagamento(ids) {
   ricevutaPendente = null;
   payIds = ids.filter(id => S.items[id]);
@@ -2764,6 +2783,10 @@ function apriPagamento(ids) {
   // Addebiti diretti (es. fatture da Atlantis): la banca è già nota
   const bancaNota = S.items[payIds[0]].banca;
   if (bancaNota && BANCHE.includes(bancaNota)) $('payBanca').value = bancaNota;
+  // Commissione dell'addebito (fatture Radius): si cambia o si azzera se si paga in altro modo, es. bonifico
+  const comm = payIds.length === 1 ? commissioneDi(S.items[payIds[0]]) : null;
+  $('payCommBox').hidden = comm === null;
+  if (comm !== null) { $('payComm').value = comm.toFixed(2); aggiornaHintComm(); }
   apriModal('payModal');
 }
 $('payForm').addEventListener('submit', async e => {
@@ -2774,6 +2797,13 @@ $('payForm').addEventListener('submit', async e => {
     const it = S.items[id]; if (!it) return;
     undo[id] = it;
     const extra = (ricevutaPendente && payIds.length === 1) ? { ricevuta: ricevutaPendente } : {};
+    if (!$('payCommBox').hidden && payIds.length === 1) {
+      const vecchia = commissioneDi(it) || 0, nuova = Math.max(0, num2(parseValore($('payComm').value)));
+      if (nuova !== vecchia) Object.assign(extra, {
+        commissione: nuova, importo: num2(Number(it.importo) - vecchia + nuova),
+        note: String(it.note || '').replace(/commissione banca [\d.,\s\u00a0]*€/i, 'commissione banca ' + formatEuro(nuova))
+      });
+    }
     upd[id] = conMeta(Object.assign({}, it, { pagato: true, dataPagamento: data, banca }, extra));
   });
   ricevutaPendente = null;
@@ -3974,6 +4004,7 @@ function mostraLinkAtlantis(imp) {
         titolo: `Fattura ${imp.fo.breve} n. ${f.numero} del ${formatData(f.data)}`,
         ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
         importo: num2(f.importo + (imp.fo.commissione || 0)), scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
+        commissione: imp.fo.commissione || null,
         note: `Addebito diretto su c/c ${imp.fo.conto} (${imp.fo.banca}).` +
           (imp.fo.commissione ? ` Fattura ${formatEuro(f.importo)} + commissione banca ${formatEuro(imp.fo.commissione)}.` : '') + ' Importata da Atlantis.'
       }));

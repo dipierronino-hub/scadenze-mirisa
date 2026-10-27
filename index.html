@@ -2696,6 +2696,12 @@ function vai(v) {
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => vai(b.dataset.view)));
+// Porta in vista l'elenco delle scadenze (sotto il promemoria), tenendo conto dell'intestazione fissa
+function scorriAElenco() {
+  const card = $('chipsStato').closest('.card'), h = document.querySelector('header.top');
+  const y = card.getBoundingClientRect().top + window.scrollY - (h ? h.offsetHeight : 0) - 8;
+  window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+}
 
 document.querySelectorAll('[data-sub]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-sub]').forEach(x => x.classList.toggle('active', x === b));
@@ -2742,7 +2748,7 @@ document.addEventListener('click', e => {
     case 'elimina': eliminaVoce(id); break;
     case 'cal': apriCalendario(id); break;
     case 'ricevuta': apriQuietanzaArchiviata(id); break;
-    case 'mostra-scadute': S.piano = 'TUTTI'; render(); impostaStato('scadute'); vai('scadenze'); break;
+    case 'mostra-scadute': S.piano = 'TUTTI'; render(); impostaStato('scadute'); vai('scadenze'); scorriAElenco(); break;
     case 'filtra-piano': S.piano = b.dataset.piano; S.sel.clear(); render(); break;
   }
 });

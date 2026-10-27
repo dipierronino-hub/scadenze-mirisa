@@ -1062,6 +1062,20 @@
 </div>
 <input type="file" id="ricFile" accept=".csv,.xlsx,.pdf" hidden>
 
+<!-- ======== MODALE FATTURE DA ATLANTIS (link preparato da Claude) ======== -->
+<div class="modal" id="atlModal">
+  <div class="mbox sm">
+    <h3>🧾 Fatture da Atlantis</h3>
+    <p id="atlTitolo" class="muted" style="margin:0;"></p>
+    <div id="atlLista" class="stack" style="margin-top:12px;"></div>
+    <p class="hint">Le fatture già presenti nello scadenzario non vengono create di nuovo.</p>
+    <div class="mfoot">
+      <button type="button" class="btn btn-ghost" data-close="atlModal">Annulla</button>
+      <button type="button" class="btn btn-primary" id="atlCrea">Crea scadenze</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"><span id="toastMsg"></span><button id="toastUndo">↩ Annulla</button></div>
 
 <script>
@@ -1585,6 +1599,11 @@ auth.onAuthStateChanged(async user => {
   }
   apriApp(user);
   if (azioneIniziale === 'nuova') { apriNuova(); history.replaceState(null, '', location.pathname); }
+  if (linkAtlantis) {
+    const imp = linkAtlantis; linkAtlantis = null;
+    try { S.items = (await db.ref(PATH).get()).val() || {}; mostraLinkAtlantis(imp); }
+    catch (e) { alert('Fatture da Atlantis non lette: ' + e.message); }
+  }
 });
 
 function apriApp(user) {
@@ -2741,6 +2760,9 @@ function apriPagamento(ids) {
     ? `<b>${esc(etichettaRata(S.items[payIds[0]]))}</b> · ${esc(sottotitolo(S.items[payIds[0]]))}<br>${formatEuro(tot)}`
     : `<b>${payIds.length} rate</b> per un totale di <b>${formatEuro(tot)}</b>`;
   $('payData').value = oggiIso();
+  // Addebiti diretti (es. fatture da Atlantis): la banca è già nota
+  const bancaNota = S.items[payIds[0]].banca;
+  if (bancaNota && BANCHE.includes(bancaNota)) $('payBanca').value = bancaNota;
   apriModal('payModal');
 }
 $('payForm').addEventListener('submit', async e => {
@@ -3888,6 +3910,80 @@ aggiornaInfoInstalla();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker non registrato', err));
 }
+// ==============================================================
+// FATTURE DA ATLANTIS: Claude legge le partite aperte nel gestionale e prepara un link
+//   …/scadenze-mirisa/#atlantis=<JSON in base64url>
+// I dati stanno nel frammento (#), quindi non arrivano a nessun server. Si apre, si conferma, si salva.
+// Fornitori con addebito diretto: per ora Radius, pagata con SDD sul c/c Cassa Rurale di Castellana Grotte.
+// ==============================================================
+const FORNITORI_ADDEBITO = {
+  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte' }
+};
+const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
+function leggiLinkAtlantis() {
+  const m = location.hash.match(/[#&]atlantis=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search); // il link si usa una volta sola
+  try {
+    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+    const d = JSON.parse(json);
+    const fo = FORNITORI_ADDEBITO[d && d.fo];
+    if (!fo || !Array.isArray(d.f)) return null;
+    const fatture = d.f.slice(0, 50).map(x => ({
+      numero: String(x.n || '').trim(), data: String(x.d || ''), scadenza: String(x.s || ''), importo: num2(x.i)
+    })).filter(x => /^[\w\-\/]{1,30}$/.test(x.numero) && ISO_DATA.test(x.data) && ISO_DATA.test(x.scadenza) && x.importo > 0 && x.importo < 1e6);
+    return fatture.length ? { chiaveFo: d.fo, fo, fatture } : null;
+  } catch (e) { console.warn('Link Atlantis non valido', e); return null; }
+}
+let linkAtlantis = leggiLinkAtlantis();
+
+function idFatturaAtlantis(chiaveFo, numero) { return chiave(`atl_${chiaveFo}_${numero}`); }
+// Già presente: stessa chiave (creata da un link precedente) oppure stesso numero fattura dello stesso fornitore inserito a mano
+function fatturaGiaPresente(imp, f) {
+  if (S.items[idFatturaAtlantis(imp.chiaveFo, f.numero)]) return true;
+  const nome = imp.fo.breve.toLowerCase();
+  return lista().some(it => {
+    const testo = [it.titolo, it.riferimento, it.note, it.ente].join(' ').toLowerCase();
+    return testo.includes(nome) && testo.includes(f.numero.toLowerCase());
+  });
+}
+function mostraLinkAtlantis(imp) {
+  const righe = imp.fatture.map((f, k) => ({ f, k, gia: fatturaGiaPresente(imp, f) }));
+  const nuove = righe.filter(r => !r.gia).length;
+  $('atlTitolo').innerHTML = `<b>${esc(imp.fo.ente)}</b> · addebito su c/c ${esc(imp.fo.conto)}<br>` +
+    (nuove ? `${nuove} da aggiungere` : 'Sono già tutte nello scadenzario.');
+  $('atlLista').innerHTML = righe.map(({ f, k, gia }) => `
+    <label class="pr-row" style="cursor:${gia ? 'default' : 'pointer'};${gia ? 'opacity:.6;' : ''}">
+      <input type="checkbox" data-atl="${k}" ${gia ? 'disabled' : 'checked'} style="width:auto;">
+      <span style="flex:1;min-width:0;">Fatt. n. ${esc(f.numero)} del ${formatData(f.data)}<br>
+        <small class="muted">${gia ? 'già presente' : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
+      <b class="num">${formatEuro(f.importo)}</b>
+    </label>`).join('');
+  $('atlCrea').hidden = !nuove;
+  $('atlCrea').onclick = async () => {
+    const upd = {};
+    $('atlLista').querySelectorAll('input[data-atl]:checked').forEach(c => {
+      const f = imp.fatture[Number(c.dataset.atl)];
+      if (!f || fatturaGiaPresente(imp, f)) return;
+      const id = idFatturaAtlantis(imp.chiaveFo, f.numero);
+      upd[id] = conMeta(normalizza({
+        id, pianoId: 'SPESE_SINGOLE', categoria: 'Altro',
+        titolo: `Fattura ${imp.fo.breve} n. ${f.numero} del ${formatData(f.data)}`,
+        ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
+        importo: f.importo, scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
+        note: `Addebito diretto su c/c ${imp.fo.conto} (${imp.fo.banca}). Importata da Atlantis.`
+      }));
+    });
+    const n = Object.keys(upd).length;
+    if (!n) { chiudiModal('atlModal'); return; }
+    const undo = {}; Object.keys(upd).forEach(id => { undo[id] = null; });
+    chiudiModal('atlModal');
+    await scrivi(upd, n === 1 ? 'Scadenza creata' : `${n} scadenze create`, undo);
+  };
+  apriModal('atlModal');
+}
+
 // Scorciatoia "Nuova scadenza" (tasto destro sull'icona dell'app)
 const azioneIniziale = new URLSearchParams(location.search).get('azione');
 

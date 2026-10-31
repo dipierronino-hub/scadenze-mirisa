@@ -1108,7 +1108,7 @@ const AZIENDA = 'Mirisa Ceramiche';
 const PATH = 'scadenze_v2';
 const VECCHIO_PATH = 'archivio_scadenze';
 const MINUTI_INATTIVITA = 15;
-const BANCHE = ['BCC BARI E TARANTO', 'BCC CASTELLANA GROTTE', 'BANCA POPOLARE PUGLIESE', 'BPPB', 'Intesa Sanpaolo', 'Altro / Cassa'];
+const BANCHE = ['BCC BARI E TARANTO', 'CartaBCC Impresa', 'BCC CASTELLANA GROTTE', 'BANCA POPOLARE PUGLIESE', 'BPPB', 'Intesa Sanpaolo', 'Altro / Cassa'];
 
 // Categorie delle scadenze varie: icona, cosa chiedere come riferimento, ricorrenza proposta
 const CATEGORIE = [
@@ -3957,13 +3957,13 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 //   …/scadenze-mirisa/#atlantis=<JSON in base64url>
 // I dati stanno nel frammento (#), quindi non arrivano a nessun server. Si apre, si conferma, si salva.
 // Fornitori importabili: Radius (SDD sul c/c Cassa Rurale di Castellana Grotte) e Società Elettrica
-// (bolletta luce, pagata con la carta di credito BCC Bari e Taranto).
+// (bolletta luce, pagata con la CartaBCC Impresa, carta di credito BCC Bari e Taranto).
 // pagamento: come si paga, mostrato nella finestra e scritto nelle note della scadenza.
 // commissione: quanto addebita la banca per ogni pagamento, sommato all'importo della fattura.
 // ==============================================================
 const FORNITORI_ADDEBITO = {
   radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', pagamento: 'Addebito diretto su c/c Cassa Rurale di Castellana Grotte', commissione: 1 },
-  elettrica: { ente: 'Società Elettrica S.p.A.', breve: 'Società Elettrica', categoria: 'Utenze', banca: 'BCC BARI E TARANTO', pagamento: 'Pagamento con carta di credito BCC Bari e Taranto', commissione: 0 }
+  elettrica: { ente: 'Società Elettrica S.p.A.', breve: 'Società Elettrica', categoria: 'Utenze', banca: 'CartaBCC Impresa', pagamento: 'Pagamento con CartaBCC Impresa (carta di credito BCC Bari e Taranto)', commissione: 0 }
 };
 const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
 function leggiLinkAtlantis() {

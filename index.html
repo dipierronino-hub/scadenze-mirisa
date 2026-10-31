@@ -3956,11 +3956,14 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 // FATTURE DA ATLANTIS: Claude legge le partite aperte nel gestionale e prepara un link
 //   …/scadenze-mirisa/#atlantis=<JSON in base64url>
 // I dati stanno nel frammento (#), quindi non arrivano a nessun server. Si apre, si conferma, si salva.
-// Fornitori con addebito diretto: per ora Radius, pagata con SDD sul c/c Cassa Rurale di Castellana Grotte.
+// Fornitori importabili: Radius (SDD sul c/c Cassa Rurale di Castellana Grotte) e Società Elettrica
+// (bolletta luce, pagata con la carta di credito BCC Bari e Taranto).
+// pagamento: come si paga, mostrato nella finestra e scritto nelle note della scadenza.
 // commissione: quanto addebita la banca per ogni pagamento, sommato all'importo della fattura.
 // ==============================================================
 const FORNITORI_ADDEBITO = {
-  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', conto: 'Cassa Rurale di Castellana Grotte', commissione: 1 }
+  radius: { ente: 'Radius Business Solutions (Italia) Srl', breve: 'Radius', categoria: 'Fatture Radius', banca: 'BCC CASTELLANA GROTTE', pagamento: 'Addebito diretto su c/c Cassa Rurale di Castellana Grotte', commissione: 1 },
+  elettrica: { ente: 'Società Elettrica S.p.A.', breve: 'Società Elettrica', categoria: 'Utenze', banca: 'BCC BARI E TARANTO', pagamento: 'Pagamento con carta di credito BCC Bari e Taranto', commissione: 0 }
 };
 const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
 function leggiLinkAtlantis() {
@@ -3994,7 +3997,7 @@ function fatturaGiaPresente(imp, f) {
 function mostraLinkAtlantis(imp) {
   const righe = imp.fatture.map((f, k) => ({ f, k, gia: fatturaGiaPresente(imp, f) }));
   const nuove = righe.filter(r => !r.gia).length;
-  $('atlTitolo').innerHTML = `<b>${esc(imp.fo.ente)}</b> · addebito su c/c ${esc(imp.fo.conto)}<br>` +
+  $('atlTitolo').innerHTML = `<b>${esc(imp.fo.ente)}</b> · ${esc(imp.fo.pagamento.toLowerCase())}<br>` +
     (nuove ? `${nuove} da aggiungere` : 'Sono già tutte nello scadenzario.');
   $('atlLista').innerHTML = righe.map(({ f, k, gia }) => `
     <label class="pr-row" style="cursor:${gia ? 'default' : 'pointer'};${gia ? 'opacity:.6;' : ''}">
@@ -4016,7 +4019,7 @@ function mostraLinkAtlantis(imp) {
         ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
         importo: num2(f.importo + (imp.fo.commissione || 0)), scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
         commissione: imp.fo.commissione || null,
-        note: `Addebito diretto su c/c ${imp.fo.conto} (${imp.fo.banca}).` +
+        note: `${imp.fo.pagamento} (${imp.fo.banca}).` +
           (imp.fo.commissione ? ` Fattura ${formatEuro(f.importo)} + commissione banca ${formatEuro(imp.fo.commissione)}.` : '') + ' Importata da Atlantis.'
       }));
     });

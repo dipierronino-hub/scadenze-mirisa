@@ -3977,7 +3977,9 @@ function leggiLinkAtlantis() {
     const fo = FORNITORI_ADDEBITO[d && d.fo];
     if (!fo || !Array.isArray(d.f)) return null;
     const fatture = d.f.slice(0, 50).map(x => ({
-      numero: String(x.n || '').trim(), data: String(x.d || ''), scadenza: String(x.s || ''), importo: num2(x.i)
+      numero: String(x.n || '').trim(), data: String(x.d || ''), scadenza: String(x.s || ''), importo: num2(x.i),
+      // facoltativi: p = data di pagamento (fattura già pagata), b = banca / conto se diverso da quello del fornitore
+      pagata: ISO_DATA.test(String(x.p || '')) ? String(x.p) : null, banca: BANCHE.includes(x.b) ? x.b : null
     })).filter(x => /^[\w\-\/]{1,30}$/.test(x.numero) && ISO_DATA.test(x.data) && ISO_DATA.test(x.scadenza) && x.importo > 0 && x.importo < 1e6);
     return fatture.length ? { chiaveFo: d.fo, fo, fatture } : null;
   } catch (e) { console.warn('Link Atlantis non valido', e); return null; }
@@ -4003,7 +4005,7 @@ function mostraLinkAtlantis(imp) {
     <label class="pr-row" style="cursor:${gia ? 'default' : 'pointer'};${gia ? 'opacity:.6;' : ''}">
       <input type="checkbox" data-atl="${k}" ${gia ? 'disabled' : 'checked'} style="width:auto;">
       <span style="flex:1;min-width:0;">Fatt. n. ${esc(f.numero)} del ${formatData(f.data)}<br>
-        <small class="muted">${gia ? 'già presente' : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
+        <small class="muted">${gia ? 'già presente' : f.pagata ? 'pagata il ' + formatData(f.pagata) + ' · ' + esc(f.banca || imp.fo.banca) : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
       <b class="num">${formatEuro(f.importo + (imp.fo.commissione || 0))}${imp.fo.commissione ? `<br><small class="muted">+${formatEuro(imp.fo.commissione)} comm.</small>` : ''}</b>
     </label>`).join('');
   $('atlCrea').hidden = !nuove;
@@ -4017,9 +4019,10 @@ function mostraLinkAtlantis(imp) {
         id, pianoId: 'SPESE_SINGOLE', categoria: imp.fo.categoria,
         titolo: `Fattura ${imp.fo.breve} n. ${f.numero} del ${formatData(f.data)}`,
         ente: imp.fo.ente, riferimento: `Fatt. ${f.numero}`,
-        importo: num2(f.importo + (imp.fo.commissione || 0)), scadenza: f.scadenza, pagato: false, banca: imp.fo.banca,
+        importo: num2(f.importo + (imp.fo.commissione || 0)), scadenza: f.scadenza,
+        pagato: !!f.pagata, dataPagamento: f.pagata || null, banca: f.banca || imp.fo.banca,
         commissione: imp.fo.commissione || null,
-        note: `${imp.fo.pagamento} (${imp.fo.banca}).` +
+        note: (f.banca && f.banca !== imp.fo.banca ? `Pagata da ${f.banca}.` : `${imp.fo.pagamento} (${imp.fo.banca}).`) +
           (imp.fo.commissione ? ` Fattura ${formatEuro(f.importo)} + commissione banca ${formatEuro(imp.fo.commissione)}.` : '') + ' Importata da Atlantis.'
       }));
     });

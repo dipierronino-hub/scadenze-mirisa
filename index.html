@@ -934,6 +934,14 @@
             <button class="btn btn-ghost" id="btnPdfPiano" hidden>📄 PDF piano di ammortamento</button>
             <button class="btn btn-danger" id="btnEliminaPiano">Elimina tutto il gruppo</button>
           </div>
+          <div id="boxBancaPiano" hidden style="margin-top:12px;">
+            <label class="f" for="pianoBanca">Banca di addebito predefinita delle rate</label>
+            <select id="pianoBanca" class="sel-banche"></select>
+            <div class="row" style="margin-top:10px;">
+              <button class="btn btn-primary" id="btnBancaPiano">🏦 Applica alle rate da pagare</button>
+            </div>
+            <p class="hint">Quando segni una rata come pagata, questa banca è già proposta (si può sempre cambiare). Le rate già pagate non vengono toccate.</p>
+          </div>
         </div>
       </div>
 
@@ -1109,6 +1117,10 @@ const PATH = 'scadenze_v2';
 const VECCHIO_PATH = 'archivio_scadenze';
 const MINUTI_INATTIVITA = 15;
 const BANCHE = ['BCC BARI E TARANTO', 'CartaBCC Impresa', 'BCC CASTELLANA GROTTE', 'BANCA POPOLARE PUGLIESE', 'BPPB', 'Intesa Sanpaolo', 'Altro / Cassa'];
+// Nome mostrato a schermo: il valore salvato nel database resta quello di BANCHE
+const NOMI_BANCA = { 'BANCA POPOLARE PUGLIESE': 'Banca Popolare Pugliese', 'BPPB': 'Banca Popolare di Puglia e Basilicata (BPPB)' };
+const nomeBanca = b => NOMI_BANCA[b] || b;
+const opzioniBanche = () => BANCHE.map(b => `<option value="${esc(b)}">${esc(nomeBanca(b))}</option>`).join('');
 
 // Categorie delle scadenze varie: icona, cosa chiedere come riferimento, ricorrenza proposta
 const CATEGORIE = [
@@ -1521,7 +1533,7 @@ function chiudiModal(id) { $(id).classList.remove('open'); }
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => chiudiModal(b.dataset.close)));
 document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) chiudiModal(m.id); }));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal.open').forEach(m => chiudiModal(m.id)); });
-document.querySelectorAll('.sel-banche').forEach(sel => { sel.innerHTML = BANCHE.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join(''); });
+document.querySelectorAll('.sel-banche').forEach(sel => { sel.innerHTML = opzioniBanche(); });
 
 // ---------- Tema chiaro / scuro ----------
 function applicaTema(t) {
@@ -2411,7 +2423,7 @@ function renderLista() {
       <td class="r num">${formatEuro(it.quotaInteressi)}</td>
       <td class="r num">${it.quotaNotifica > 0 ? formatEuro(it.quotaNotifica) : '-'}</td>
       <td class="num">${it.pagato && it.dataPagamento ? formatData(it.dataPagamento) : '-'}</td>
-      <td>${it.pagato && it.banca ? `<span class="badge b-banca">${esc(it.banca)}</span>` : '-'}</td>
+      <td>${it.pagato && it.banca ? `<span class="badge b-banca">${esc(nomeBanca(it.banca))}</span>` : '-'}</td>
       <td><small>${esc(it.note) || '-'}</small></td>
       <td class="sticky">${azioni(it)}</td>
     </tr>`;
@@ -2425,7 +2437,7 @@ function renderLista() {
         <div class="rc-title"><span class="cat-ico">${icona(it)}</span>${esc(etichettaRata(it))}</div>
         <div class="rc-sub">${esc(sottotitolo(it))}</div>
         <div class="rc-sub" style="margin-top:4px;"><span class="badge ${st.badge}">${st.label}</span> scad. ${formatData(it.scadenza)}</div>
-        ${it.pagato ? `<div class="rc-sub">Pagata il ${formatData(it.dataPagamento)}${it.banca ? ' · ' + esc(it.banca) : ''}</div>` : ''}
+        ${it.pagato ? `<div class="rc-sub">Pagata il ${formatData(it.dataPagamento)}${it.banca ? ' · ' + esc(nomeBanca(it.banca)) : ''}</div>` : ''}
         ${it.note ? `<div class="rc-sub">📝 ${esc(it.note)}</div>` : ''}
       </div>
       <div class="rc-imp num">${formatEuro(it.importo)}</div>
@@ -2816,7 +2828,7 @@ $('payForm').addEventListener('submit', async e => {
   chiudiModal('payModal');
   const n = Object.keys(upd).length;
   const pagati = Object.keys(upd).map(id => upd[id]);
-  if (await scrivi(upd, n === 1 ? `Pagata il ${formatData(data)} · ${banca}` : `${n} scadenze segnate come pagate`, undo)) {
+  if (await scrivi(upd, n === 1 ? `Pagata il ${formatData(data)} · ${nomeBanca(banca)}` : `${n} scadenze segnate come pagate`, undo)) {
     payIds.forEach(id => S.sel.delete(id));
     renderBulk();
     await proponiRinnovi(pagati);
@@ -2827,7 +2839,8 @@ async function riapri(ids) {
   ids.forEach(id => {
     const it = S.items[id]; if (!it) return;
     undo[id] = it;
-    upd[id] = conMeta(Object.assign({}, it, { pagato: false, dataPagamento: null, banca: null, riconciliazione: null }));
+    // Mutui: la banca resta come banca di addebito predefinita della rata riaperta
+    upd[id] = conMeta(Object.assign({}, it, { pagato: false, dataPagamento: null, banca: isMutuo(it) ? (it.banca || null) : null, riconciliazione: null }));
   });
   if (await scrivi(upd, ids.length === 1 ? 'Riportata a "Da pagare"' : `${ids.length} rate riaperte`, undo)) {
     ids.forEach(id => S.sel.delete(id)); renderBulk();
@@ -2880,7 +2893,8 @@ $('editForm').addEventListener('submit', async e => {
   const nuovo = Object.assign({}, it, {
     titolo: $('editTitolo').value.trim(), scadenza: $('editScadenza').value, pagato,
     dataPagamento: pagato ? ($('editDataPag').value || oggiIso()) : null,
-    banca: pagato ? $('editBanca').value : null,
+    // da pagare: si conserva la banca di addebito già nota (mutui, addebiti diretti)
+    banca: pagato || isMutuo(it) ? $('editBanca').value : (it.pagato ? null : (it.banca || null)),
     quotaCapitale: num2($('editCap').value), quotaMora: num2($('editMora').value),
     quotaInteressi: num2($('editInt').value), quotaNotifica: num2($('editNot').value),
     importo: num2($('editTot').value), note: $('editNote').value.trim()
@@ -3087,11 +3101,17 @@ function parseAmmortamentoMutuo(testo, pagateFino = 0) {
   return [...trovate.values()].sort((a, b) => a.scadenza.localeCompare(b.scadenza) || a.n - b.n);
 }
 function aggiornaBtnPdfPiano() {
-  const p = S.piani[$('pianoMod').value];
+  const k = $('pianoMod').value, p = S.piani[k];
   $('btnPdfPiano').hidden = !(p && p.pdfPiano);
+  // Mutui: banca di addebito predefinita (quella delle rate da pagare, se già impostata)
+  $('boxBancaPiano').hidden = !(p && p.mutuo);
+  if (p && p.mutuo) {
+    const nota = lista().find(it => pianoKey(it) === k && !it.pagato && BANCHE.includes(it.banca));
+    $('pianoBanca').value = nota ? nota.banca : BANCHE[0];
+  }
 }
 
-$('mutuoBanca').innerHTML = '<option value="">— seleziona la banca —</option>' + BANCHE.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+$('mutuoBanca').innerHTML = '<option value="">— seleziona la banca —</option>' + opzioniBanche();
 $('btnMutuoPdf').addEventListener('click', () => $('importMutuoFile').click());
 $('btnPdfPiano').addEventListener('click', () => {
   const p = S.piani[$('pianoMod').value];
@@ -3140,7 +3160,7 @@ $('importMutuoFile').addEventListener('change', async e => {
         id: r.id, pianoId, pianoNome: nome, numeroRata: r.n > 0 ? r.n : null, totaleRatePiano: r.n > 0 ? totRate : null,
         titolo: r.n > 0 ? `${nome} - Rata ${r.n}` : `${nome} - Preammortamento ${nPre}`, categoria: CAT_MUTUO, importo: r.rata, quotaCapitale: r.capitale,
         quotaMora: r.mora, quotaInteressi: r.interessi, quotaNotifica: 0, scadenza: r.scadenza,
-        pagato: r.pagata, dataPagamento: r.pagata ? r.scadenza : null, banca: r.pagata ? (bancaMutuo || null) : null, debitoResiduo: r.residuo,
+        pagato: r.pagata, dataPagamento: r.pagata ? r.scadenza : null, banca: bancaMutuo || null, debitoResiduo: r.residuo,
         note: [r.pagata ? 'Pagata secondo il piano (data di pagamento = scadenza)' : '', r.residuo !== null ? `Debito residuo ${formatEuro(r.residuo)}` : ''].filter(Boolean).join(' · ')
       });
       upd[it.id] = conMeta(it);
@@ -3624,7 +3644,7 @@ function renderArchivio() {
     const gi = gruppiArch.length;
     gruppiArch.push({ nome: `${g.cart} ${g.anno}`, indici: g.righe.map(r => r.i) });
     html += `<tr class="arch-gruppo"><td colspan="7"><b>📁 ${esc(g.cart)} · ${esc(g.anno)}</b> <small>${g.righe.length} ${g.righe.length === 1 ? 'documento' : 'documenti'}</small> <button class="btn btn-ghost" type="button" data-zip="${gi}">📦 Scarica cartella (.zip)</button></td></tr>`;
-    g.righe.forEach(({ d, i }) => { html += `<tr class="arch-riga" data-arch="${i}" title="Tocca per aprire il PDF"><td class="num">${formatData(d.data)}</td><td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td><td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td><td class="num">${formatEuro(d.importo)}</td><td>${esc(d.it.banca || "-")}</td><td class="num">${esc(d.avviso || "-")}</td><td><button class="ib" data-scarica="${i}" title="Scarica PDF">⬇️</button></td></tr>`; });
+    g.righe.forEach(({ d, i }) => { html += `<tr class="arch-riga" data-arch="${i}" title="Tocca per aprire il PDF"><td class="num">${formatData(d.data)}</td><td>${esc(d.tipo)}<br><small>${esc(d.nome)}</small></td><td>${esc(d.it.pianoNome)}<br><small>${esc(etichettaRata(d.it))}</small></td><td class="num">${formatEuro(d.importo)}</td><td>${esc(nomeBanca(d.it.banca) || "-")}</td><td class="num">${esc(d.avviso || "-")}</td><td><button class="ib" data-scarica="${i}" title="Scarica PDF">⬇️</button></td></tr>`; });
   });
   html += '</tbody></table>';
   $('archLista').innerHTML = html;
@@ -3845,6 +3865,16 @@ $('btnRinomina').addEventListener('click', async () => {
   if (k.startsWith('CAT:')) { S.piano = 'TUTTI'; $('pianoMod').value = ''; $('boxPianoMod').hidden = true; }
   await scrivi(upd, 'Nome aggiornato');
 });
+$('btnBancaPiano').addEventListener('click', async () => {
+  const k = $('pianoMod').value, banca = $('pianoBanca').value;
+  if (!S.piani[k] || !S.piani[k].mutuo || !BANCHE.includes(banca)) return;
+  const upd = {};
+  lista().filter(it => pianoKey(it) === k && !it.pagato && it.banca !== banca)
+    .forEach(it => { upd[it.id] = conMeta(Object.assign({}, it, { banca })); });
+  const n = Object.keys(upd).length;
+  if (!n) { mostraToast('Le rate da pagare hanno già questa banca'); return; }
+  await scrivi(upd, `${n} rate da pagare con ${nomeBanca(banca)}`);
+});
 $('btnEliminaPiano').addEventListener('click', async () => {
   const k = $('pianoMod').value;
   const rate = lista().filter(it => pianoKey(it) === k);
@@ -4005,7 +4035,7 @@ function mostraLinkAtlantis(imp) {
     <label class="pr-row" style="cursor:${gia ? 'default' : 'pointer'};${gia ? 'opacity:.6;' : ''}">
       <input type="checkbox" data-atl="${k}" ${gia ? 'disabled' : 'checked'} style="width:auto;">
       <span style="flex:1;min-width:0;">Fatt. n. ${esc(f.numero)} del ${formatData(f.data)}<br>
-        <small class="muted">${gia ? 'già presente' : f.pagata ? 'pagata il ' + formatData(f.pagata) + ' · ' + esc(f.banca || imp.fo.banca) : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
+        <small class="muted">${gia ? 'già presente' : f.pagata ? 'pagata il ' + formatData(f.pagata) + ' · ' + esc(nomeBanca(f.banca || imp.fo.banca)) : 'scade il ' + formatData(f.scadenza) + (giorniA(f.scadenza) < 0 ? ' (già passata)' : '')}</small></span>
       <b class="num">${formatEuro(f.importo + (imp.fo.commissione || 0))}${imp.fo.commissione ? `<br><small class="muted">+${formatEuro(imp.fo.commissione)} comm.</small>` : ''}</b>
     </label>`).join('');
   $('atlCrea').hidden = !nuove;
